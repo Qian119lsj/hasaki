@@ -1,0 +1,67 @@
+#pragma once
+
+#include "hasaki/appsettings.h"
+#include "hasaki/packet_forwarder.h"
+#include "hasaki/portprocessmonitor.h"
+#include "hasaki/proxy_server.h"
+#include "hasaki/endpoint_mapper.h"
+
+#include <QMainWindow>
+#include <QComboBox>
+#include <QMap>
+#include <QPair>
+
+QT_BEGIN_NAMESPACE
+namespace Ui {
+class MainWindow;
+}
+QT_END_NAMESPACE
+
+class AppSettings;
+class PortProcessMonitor;
+class EndpointMapper;
+class PacketForwarder;
+class ProxyServer;
+class SettingsDialog;
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+
+public:
+    MainWindow(QWidget* parent = nullptr);
+    ~MainWindow();
+    
+    // 获取IP地址到网络适配器索引的映射
+    const QMap<QString, int>& getAdapterIpMap() const { return adapterIpMap_; }
+
+private slots:
+    void on_actionSettings_triggered();
+    void on_actionAddSocks5Server_triggered();
+    void on_actionUdpTest_triggered();
+    void applySettings();
+    void updateMappingsView();
+    void on_startButton_clicked();
+    void on_stopButton_clicked();
+    void on_socks5ServerComboBox_currentIndexChanged(int index);
+    void on_editServerButton_clicked();
+    void on_deleteServerButton_clicked();
+
+private:
+    void startForwarding();
+    void stopForwarding();
+    void applySettingsFromDialog(SettingsDialog* dialog);
+    void updateSocks5ServerComboBox();
+    void initializeAdapterIpMap();
+
+    Ui::MainWindow* ui;
+    AppSettings* appSettings_;
+    PortProcessMonitor* portProcessMonitor_;
+    PacketForwarder* packetForwarder_;
+    ProxyServer* proxyServer_;
+    EndpointMapper* endpointMapper_;
+    QComboBox* socks5ServerComboBox_;
+    bool is_running_ = false;
+    
+    // 存储IP地址到网络适配器索引的映射
+    QMap<QString, int> adapterIpMap_;
+};

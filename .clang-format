@@ -1,0 +1,26 @@
+# 基于 LLVM 风格进行自定义
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20
+
+# --- 1. 缩进配置 (Indentation) ---
+# 使用空格而非Tab
+UseTab: Never
+# 缩进宽度为4个空格
+IndentWidth: 4
+# Tab字符的宽度（即使不使用也建议保留此设置）
+TabWidth: 4
+# 访问修饰符(public:, private:)相对于当前缩进的偏移量，-4表示向左缩进4个空格
+AccessModifierOffset: -4
+
+# 每行最大字符数
+ColumnLimit: 160
+
+# --- 2. 大括号不换行配置 (Brace Wrapping) ---
+# 将大括号附加(Attach)到声明或语句的末尾，而不是新起一行
+# 这是实现“大括号不换行”（如 K&R 风格）的核心配置
+BreakBeforeBraces: Attach
+
+# --- 3. 不重排序 include 配置 (Include Sorting) ---
+# 禁用 include 自动排序和分组功能，保持其原始顺序
+SortIncludes: false

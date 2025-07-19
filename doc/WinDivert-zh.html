@@ -1,0 +1,4216 @@
+<!doctype html>
+
+<html lang="zh-CN">
+
+<head>
+
+    <title>WinDivert 2.2 文档</title>
+
+    <meta charset="UTF-8"/>
+
+</head>
+
+<body>
+
+<h1>WinDivert 2.2：Windows 数据包转向工具</h1>
+
+<h2>目录</h2>
+
+<ul>
+
+<li><a href="#introduction">1. 简介</a></li>
+
+<li><a href="#building">2. 构建</a>
+
+<ul>
+
+<li><a href="#driver_signing">2.1 驱动程序签名</a></li>
+
+</ul>
+
+</li>
+
+<li><a href="#installing">3. 安装</a></li>
+
+<li><a href="#uninstalling">4. 卸载</a></li>
+
+<li><a href="#programming_api">5. 编程 API</a>
+
+<ul>
+
+<li><a href="#divert_layers">5.1 WINDIVERT_LAYER</a></li>
+
+<li><a href="#divert_events">5.2 WINDIVERT_EVENT</a></li>
+
+<li><a href="#divert_address">5.3 WINDIVERT_ADDRESS</a></li>
+
+<li><a href="#divert_open">5.4 WinDivertOpen</a></li>
+
+<li><a href="#divert_recv">5.5 WinDivertRecv</a></li>
+
+<li><a href="#divert_recv_ex">5.6 WinDivertRecvEx</a></li>
+
+<li><a href="#divert_send">5.7 WinDivertSend</a></li>
+
+<li><a href="#divert_send_ex">5.8 WinDivertSendEx</a></li>
+
+<li><a href="#divert_shutdown">5.9 WinDivertShutdown</a></li>
+
+<li><a href="#divert_close">5.10 WinDivertClose</a></li>  <!-- 注意：原文此处为 5.19，但根据上下文和后续编号应为 5.10 -->
+
+<li><a href="#divert_set_param">5.11 WinDivertSetParam</a></li>
+
+<li><a href="#divert_get_param">5.12 WinDivertGetParam</a></li>
+
+</ul>
+
+</li>
+
+<li><a href="#helper_programming_api">6. 辅助编程 API</a>
+
+<ul>
+
+<li><a href="#divert_iphdr">6.1 WINDIVERT_IPHDR</a></li>
+
+<li><a href="#divert_ipv6hdr">6.2 WINDIVERT_IPV6HDR</a></li>
+
+<li><a href="#divert_icmphdr">6.3 WINDIVERT_ICMPHDR</a></li>
+
+<li><a href="#divert_icmpv6hdr">6.4 WINDIVERT_ICMPV6HDR</a></li>
+
+<li><a href="#divert_tcphdr">6.5 WINDIVERT_TCPHDR</a></li>
+
+<li><a href="#divert_udphdr">6.6 WINDIVERT_UDPHDR</a></li>
+
+<li><a href="#divert_helper_parse_packet">6.7 WinDivertHelperParsePacket</a></li>
+
+<li><a href="#divert_helper_hash_packet">6.8 WinDivertHelperHashPacket</a></li>
+
+<li><a href="#divert_helper_parse_ipv4_address">6.9 WinDivertHelperParseIPv4Address</a></li>
+
+<li><a href="#divert_helper_parse_ipv6_address">6.10 WinDivertHelperParseIPv6Address</a></li>
+
+<li><a href="#divert_helper_format_ipv4_address">6.11 WinDivertHelperFormatIPv4Address</a></li>
+
+<li><a href="#divert_helper_format_ipv6_address">6.12 WinDivertHelperFormatIPv6Address</a></li>
+
+<li><a href="#divert_helper_calc_checksums">6.13 WinDivertHelperCalcChecksums</a></li>
+
+<li><a href="#divert_helper_dec_ttl">6.14 WinDivertHelperDecrementTTL</a></li>
+
+<li><a href="#divert_helper_compile_filter">6.15 WinDivertHelperCompileFilter</a></li>
+
+<li><a href="#divert_helper_eval_filter">6.16 WinDivertHelperEvalFilter</a></li>
+
+<li><a href="#divert_helper_format_filter">6.17 WinDivertHelperFormatFilter</a></li>
+
+<li><a href="#divert_helper_ntoh">6.18 WinDivertHelperNtoh*</a></li>
+
+<li><a href="#divert_helper_hton">6.19 WinDivertHelperHton*</a></li>
+
+</ul>
+
+</li>
+
+<li><a href="#filter_language">7. 过滤器语言</a>
+
+<ul>
+
+<li><a href="#filter_examples">7.1 过滤器示例</a></li>
+
+<li><a href="#filter_usage">7.2 过滤器用法</a></li>
+
+</ul>
+
+</li>
+
+<li><a href="#performance">8. 性能</a></li>
+
+<li><a href="#samples">9. 示例</a></li>
+
+<li><a href="#known_issues">10. 已知问题</a></li>
+
+<li><a href="#license">11. 许可证</a></li>
+
+</ul>
+
+
+<hr>
+
+<a name="introduction"><h2>1. 简介</h2></a>
+
+<p>
+WinDivert 是一个强大的用户模式
+捕获/嗅探/修改/阻塞/重新注入软件包，适用于
+Windows 10、Windows 11 和 Windows Server。
+WinDivert 可用于实现用户模式的数据包过滤器、数据包嗅探器、
+防火墙、NAT、VPN、隧道应用程序等，而无需
+编写内核模式代码。
+</p>
+
+<p>
+WinDivert 的主要特性包括：
+</p>
+
+<ul>
+
+<li> 用户模式数据包捕获、嗅探、丢弃、过滤、修改、
+     重新注入等。</li>
+
+<li> 简单、高级的编程 API。</li>
+
+<li> 附带示例程序的完整文档。</li>
+
+<li> 完全支持 IPv6。</li>
+
+<li> 完全支持环回 (localhost)。</li>
+
+<li> 现代化的 WDF/WFP 驱动程序实现。</li>
+
+<li> 开源；基于 GNU 宽通用公共许可证 (LGPL)
+     版本 3 授权。
+     更多信息请参见<a href="#license">许可证</a>。</li>
+
+</ul>
+
+<p>
+WinDivert 提供与 FreeBSD/MacOS 的 <code>divert</code> 套接字、Linux 的 <code>NETLINK</code> 套接字
+类似的功能。
+</p>
+
+
+<hr>
+
+<a name="building"><h2>2. 构建</h2></a>
+
+<p>
+请注意，预编译的 WinDivert 二进制发行版可从
+<a href="https://reqrypt.org/windivert.html">WinDivert 网站</a>获取。
+大多数用户不需要从源代码构建自己的 WinDivert 版本。
+</p>
+
+<p>
+WinDivert 的源代码可从以下地址下载：
+</p>
+
+<blockquote>
+
+<a href="https://github.com/basil00/Divert">
+    https://github.com/basil00/Divert</a>
+
+</blockquote>
+
+<p>
+要从源代码构建 WinDivert 驱动程序：
+</p>
+
+<ol>
+
+<li> 下载并安装 <a href="http://www.microsoft.com/whdc/devtools/wdk/default.mspx">
+Windows Driver Kit 7.1.0</a>。</li>
+
+<li> 打开一个 <i>x86 Free Build Environment</i> 控制台。</li>
+
+<li> 在 WinDivert 包的根目录中，运行命令：
+<pre>
+wddk-build.bat
+</pre>
+这将构建 <code>install\WDDK\i386\WinDivert32.sys</code> 驱动程序。</li>
+
+<li> 接下来，打开一个 <i>x64 Free Build Environment</i> 控制台。</li>
+
+<li> 重新运行 <code>wddk-build.bat</code> 命令以构建
+<code>install\WDDK\amd64\WinDivert64.sys</code> 驱动程序。</li>
+
+</ol>
+
+<p>
+要构建 WinDivert 用户模式库 (<code>WinDivert.dll</code>) 和示例
+程序：
+</p>
+
+<ol>
+
+<li> 首先，通过运行上述的
+<code>wddk-build.bat</code> 命令来构建 WinDivert 驱动程序。</li>
+
+<li> 在 Linux（已安装 MinGW 交叉编译器）中，并在
+WinDivert 包的根目录中，运行命令：
+<pre>
+sh mingw-build.sh
+</pre>
+这将构建用户模式库和示例程序，它们将被放置
+在 <code>install\MINGW</code> 子目录中。</li>
+
+</ol>
+
+<p>
+生成的 <code>WinDivert.dll</code>/<code>WinDivert.lib</code> 文件
+应与所有主流编译器兼容，包括 MinGW 和
+Visual Studio。
+</p>
+
+
+<a name="driver_signing"><h3>2.1 驱动程序签名</h3></a>
+
+<p>
+如果您自己构建了
+<code>WinDivert32.sys</code>/<code>WinDivert64.sys</code> 驱动程序，
+它们必须经过数字签名才能使用。
+有关更多信息，请参阅 <a href="http://msdn.microsoft.com/en-us/windows/hardware/gg487317.aspx">Windows 的驱动程序签名要求</a>。
+</p>
+
+<p>
+请注意，官方 WinDivert 发行版中的预编译 <code>WinDivert32.sys</code>/<code>WinDivert64.sys</code>
+驱动程序已经过数字签名。
+</p>
+
+
+<hr>
+
+<a name="installing"><h2>3. 安装</h2></a>
+
+<p>
+WinDivert 不需要任何特殊安装。
+根据您的目标配置，只需将以下文件放置在
+您的应用程序主目录中：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+应用程序类型
+</th>
+
+<th>
+目标 Windows 类型
+</th>
+
+<th>
+所需文件
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+32 位
+</td>
+
+<td>
+仅 32 位 Windows
+</td>
+
+<td>
+<code>WinDivert.dll</code> (32 位版本) 和 <code>WinDivert32.sys</code>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+64 位
+</td>
+
+<td>
+仅 64 位 Windows
+</td>
+
+<td>
+<code>WinDivert.dll</code> (64 位版本) 和 <code>WinDivert64.sys</code>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+32 位
+</td>
+
+<td>
+32 位和 64 位 Windows
+</td>
+
+<td>
+<code>WinDivert.dll</code> (32 位版本)、<code>WinDivert32.sys</code>
+    和 <code>WinDivert64.sys</code>
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+每当您的应用程序调用
+<a href="#divert_open"><code>WinDivertOpen()</code></a> 时，WinDivert 驱动程序会自动（并静默地）按需安装。
+调用应用程序必须具有管理员权限。
+</p>
+
+
+<hr>
+
+<a name="uninstalling"><h2>4. 卸载</h2></a>
+
+<p>
+要卸载，只需删除 <code>WinDivert.dll</code>、
+<code>WinDivert32.sys</code> 和 <code>WinDivert64.sys</code> 文件。
+如果已在运行，WinDivert 驱动程序将在下次计算机重启期间自动
+卸载。
+WinDivert 驱动程序也可以通过 (1) 终止
+所有正在使用 WinDivert 的进程，以及 (2) 在命令提示符下发出以下
+命令来手动删除：
+</p>
+
+<pre>
+    sc stop WinDivert
+    sc delete WinDivert
+</pre>
+
+<p>
+或者，可以使用
+<code>windivertctl.exe</code> <a href="#samples">示例程序</a>通过
+发出以下命令来删除 WinDivert 驱动程序：
+</p>
+
+<pre>
+    windivertctl uninstall
+</pre>
+
+
+<hr>
+
+<a name="programming_api"><h2>5. 编程 API</h2></a>
+
+<p>
+要使用 WinDivert 包，程序/应用程序必须：
+<ol>
+
+<li> 包含 <code>windivert.h</code> 头文件
+<pre>
+#include "windivert.h"
+</pre></li>
+
+<li> 链接或动态加载 <code>WinDivert.dll</code> 动态链接
+库。</li>
+
+</ol>
+
+
+<a name="divert_layers"><h3>5.1 WINDIVERT_LAYER</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef enum
+{
+    WINDIVERT_LAYER_NETWORK = 0,
+    WINDIVERT_LAYER_NETWORK_FORWARD,
+    WINDIVERT_LAYER_FLOW,
+    WINDIVERT_LAYER_SOCKET,
+    WINDIVERT_LAYER_REFLECT,
+} <b>WINDIVERT_LAYER</b>, *<b>PWINDIVERT_LAYER</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<b>备注</b><br>
+
+<p>
+WinDivert 支持多个<i>层</i>，用于转向或捕获
+网络数据包/事件。
+每个层都有其自身的功能，例如阻止
+事件或注入新事件等。
+支持的 WinDivert 层列表总结如下：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5">
+
+<tr>
+
+<th>层</th>
+
+<th colspan="4">能力</th>
+
+<th>描述</th>
+
+</tr>
+
+<tr>
+
+<th>
+</th>
+
+<th>
+阻塞？
+</th>
+
+<th>
+注入？
+</th>
+
+<th>
+数据？
+</th>
+
+<th>
+PID？
+</th>
+
+<th>
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK</code>
+</td>
+
+<td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td>
+
+<td>
+进出本地计算机的网络数据包。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK_FORWARD</code>
+</td>
+
+<td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td>
+
+<td>
+通过本地计算机的网络数据包。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_FLOW</code>
+</td>
+
+<td></td><td></td><td></td><td>&#10004;</td>
+
+<td>
+网络流建立/删除事件。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_SOCKET</code>
+</td>
+
+<td>&#10004;</td><td></td><td></td><td>&#10004;</td>
+
+<td>
+套接字操作事件。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_REFLECT</code>
+</td>
+
+<td></td><td></td><td>&#10004;</td><td>&#10004;</td>
+
+<td>
+WinDivert 句柄事件。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+此处，层能力为：
+</p>
+
+<ul>
+
+<li> (阻塞？) 该层可以阻止事件/数据包；</li>
+
+<li> (注入？) 该层可以注入新的事件/数据包；</li>
+
+<li> (数据？) 该层是否返回数据包/数据；以及</li>
+
+<li> (PID？) 与事件/数据包关联的进程 ID 是否可在此层获得。
+</ul>
+
+<p>
+<code>WINDIVERT_LAYER_NETWORK</code> 和
+<code>WINDIVERT_LAYER_NETWORK_FORWARD</code>
+层允许用户应用程序捕获/阻止/注入进出（和通过）本地计算机的网络数据包。
+由于技术限制，这些层无法获取进程 ID 信息。
+</p>
+
+<p>
+<code>WINDIVERT_LAYER_FLOW</code> 层捕获有关
+网络流建立/删除事件的信息。
+此处，<i>流</i>表示 (1) 一个
+TCP 连接，或 (2) 由非 TCP 流量（例如 UDP）的第一个
+发送/接收的数据包创建的隐式“流”。
+旧流在相应连接关闭时（对于 TCP）被删除，
+或基于活动超时（非 TCP）被删除。
+可以捕获与流相关的事件，但不能阻止或注入。
+此层也提供进程 ID 信息。
+由于技术限制，
+<code>WINDIVERT_LAYER_FLOW</code> 层无法捕获在句柄打开之前发生的流事件。
+</p>
+
+<p>
+<code>WINDIVERT_LAYER_SOCKET</code> 层可以捕获或阻止与套接字操作对应的事件，
+例如 <code>bind()</code>、
+<code>connect()</code>、<code>listen()</code> 等，或套接字操作的终止，
+例如 TCP 套接字断开连接。
+与流层不同，大多数与套接字相关的事件都可以被阻止。
+但是，无法注入新的或修改的套接字事件。
+此层提供（负责套接字操作的进程的）进程 ID 信息。
+由于技术限制，此层无法捕获在句柄打开之前发生的事件。
+</p>
+
+<p>
+最后，<code>WINDIVERT_LAYER_REFLECT</code> 层可以捕获与 WinDivert 本身相关的事件，
+例如当另一个进程打开一个新的 WinDivert 句柄或关闭一个旧的 WinDivert 句柄时。
+可以捕获 WinDivert 事件，但不能注入或阻止。
+此层提供（负责打开 WinDivert 句柄的进程的）进程 ID 信息。
+此层还以用于打开句柄的过滤器字符串的“对象”表示形式返回数据。
+可以使用
+<a href="#divert_helper_format_filter"><code>WinDivertHelperFormatFilter()</code></a>
+函数将对象表示转换回人类可读的过滤器字符串。
+此层还可以捕获在句柄打开之前发生的事件。
+此层无法捕获与其他
+<code>WINDIVERT_LAYER_REFLECT</code> 层句柄相关的事件。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_events"><h3>5.2 WINDIVERT_EVENT</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef enum
+{
+    WINDIVERT_EVENT_NETWORK_PACKET,
+    WINDIVERT_EVENT_FLOW_ESTABLISHED,
+    WINDIVERT_EVENT_FLOW_DELETED,
+    WINDIVERT_EVENT_SOCKET_BIND,
+    WINDIVERT_EVENT_SOCKET_CONNECT,
+    WINDIVERT_EVENT_SOCKET_LISTEN,
+    WINDIVERT_EVENT_SOCKET_ACCEPT,
+    WINDIVERT_EVENT_SOCKET_CLOSE,
+    WINDIVERT_EVENT_REFLECT_OPEN,
+    WINDIVERT_EVENT_REFLECT_CLOSE,
+} <b>WINDIVERT_EVENT</b>, *<b>PWINDIVERT_EVENT</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<b>备注</b><br>
+
+<p>
+每个层支持一个或多个<i>事件</i>，总结如下：
+</p>
+
+<ul>
+
+<li>
+<p>
+<b><code>WINDIVERT_LAYER_NETWORK</code></b> 和
+<b><code>WINDIVERT_LAYER_NETWORK_FORWARD</code></b>：
+仅支持单个事件：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="50%">
+
+<tr>
+
+<th>事件</th>
+
+<th>描述</th>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_NETWORK_PACKET</code>
+</td>
+
+<td>
+一个新的网络数据包。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<ul>
+
+</ul>
+
+</li>
+
+<li>
+<p>
+<b><code>WINDIVERT_LAYER_FLOW</code></b>：
+支持两个事件：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="50%">
+
+<tr>
+
+<th>事件</th>
+
+<th>描述</th>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_FLOW_ESTABLISHED</code>
+</td>
+
+<td>
+创建了一个新流。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_FLOW_DELETED</code>
+</td>
+
+<td>
+删除了一个旧流。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+</li>
+
+<li>
+<p>
+<b><code>WINDIVERT_LAYER_SOCKET</code></b>：
+支持以下事件：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="50%">
+
+<tr>
+
+<th>事件</th>
+
+<th>描述</th>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_SOCKET_BIND</code>
+</td>
+
+<td>
+一个 <code>bind()</code> 操作。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_SOCKET_CONNECT</code>
+</td>
+
+<td>
+一个 <code>connect()</code> 操作。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_SOCKET_LISTEN</code>
+</td>
+
+<td>
+一个 <code>listen()</code> 操作。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_SOCKET_ACCEPT</code>
+</td>
+
+<td>
+一个 <code>accept()</code> 操作。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_SOCKET_CLOSE</code>
+</td>
+
+<td>
+套接字端点已关闭。
+这对应于先前绑定的释放或已建立连接的终止。
+该事件不能被阻止。
+</table>
+
+</center>
+
+</li>
+
+<li>
+<p>
+<b><code>WINDIVERT_LAYER_REFLECT</code></b>：
+支持两个事件：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="50%">
+
+<tr>
+
+<th>事件</th>
+
+<th>描述</th>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_REFLECT_OPEN</code>
+</td>
+
+<td>
+打开了一个新的 WinDivert 句柄。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_EVENT_REFLECT_CLOSE</code>
+</td>
+
+<td>
+关闭了一个旧的 WinDivert 句柄。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+</li>
+
+</ul>
+
+</dd></dl>
+
+
+<a name="divert_address"><h3>5.3 WINDIVERT_ADDRESS</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef struct
+{
+    UINT32 IfIdx;
+    UINT32 SubIfIdx;
+} <b>WINDIVERT_DATA_NETWORK</b>, *<b>PWINDIVERT_DATA_NETWORK</b>;
+
+
+typedef struct
+{
+    UINT64 Endpoint;
+    UINT64 ParentEndpoint;
+    UINT32 ProcessId;
+    UINT32 LocalAddr[4];
+    UINT32 RemoteAddr[4];
+    UINT16 LocalPort;
+    UINT16 RemotePort;
+    UINT8  Protocol;
+} <b>WINDIVERT_DATA_FLOW</b>, *<b>PWINDIVERT_DATA_FLOW</b>;
+
+
+typedef struct
+{
+    UINT64 Endpoint;
+    UINT64 ParentEndpoint;
+    UINT32 ProcessId;
+    UINT32 LocalAddr[4];
+    UINT32 RemoteAddr[4];
+    UINT16 LocalPort;
+    UINT16 RemotePort;
+    UINT8  Protocol;
+} <b>WINDIVERT_DATA_SOCKET</b>, *<b>PWINDIVERT_DATA_SOCKET</b>;
+
+
+typedef struct
+{
+    INT64  Timestamp;
+    UINT32 ProcessId;
+    WINDIVERT_LAYER Layer;
+    UINT64 Flags;
+    INT16  Priority;
+} <b>WINDIVERT_DATA_REFLECT</b>, *<b>PWINDIVERT_DATA_REFLECT</b>;
+
+
+typedef struct
+{
+    INT64  Timestamp;
+    UINT64 Layer:8;
+    UINT64 Event:8;
+    UINT64 Sniffed:1;
+    UINT64 Outbound:1;
+    UINT64 Loopback:1;
+    UINT64 Impostor:1;
+    UINT64 IPv6:1;
+    UINT64 IPChecksum:1;
+    UINT64 TCPChecksum:1;
+    UINT64 UDPChecksum:1;
+    union
+    {
+        WINDIVERT_DATA_NETWORK Network;
+        WINDIVERT_DATA_FLOW    Flow;
+        WINDIVERT_DATA_SOCKET  Socket;
+        WINDIVERT_DATA_REFLECT Reflect;
+    };
+} <b>WINDIVERT_ADDRESS</b>, *<b>PWINDIVERT_ADDRESS</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>字段</b></p>
+
+<ul>
+
+<li> <code>Timestamp</code>: 指示事件发生时间的时间戳。</li>
+
+<li> <code>Layer</code>: 句柄的层 (<code>WINDIVERT_LAYER_*</code>)。</li>
+
+<li> <code>Event</code>: 捕获的事件 (<code>WINDIVERT_EVENT_*</code>)。</li>
+
+<li> <code>Sniffed</code>: 如果事件是
+    “嗅探”的（即未被阻止），则设置为 <code>1</code>，否则为 <code>0</code>。</li>
+
+<li> <code>Outbound</code>: 对于<i>出站</i>
+    数据包/事件设置为 <code>1</code>，对于<i>入站</i>或其它情况设置为 <code>0</code>。</li>
+
+<li> <code>Loopback</code>: 对于环回数据包设置为 <code>1</code>，
+否则为 <code>0</code>。</li>
+
+<li> <code>Impostor</code>: 对于“伪装”数据包设置为 <code>1</code>，
+否则为 <code>0</code>。</li>
+
+<li> <code>IPv6</code>: 对于 IPv6 数据包/事件设置为 <code>1</code>，
+否则为 <code>0</code>。</li>
+
+<li> <code>IPChecksum</code>: 如果 IPv4 校验和
+有效，则设置为 <code>1</code>，否则为 <code>0</code>。</li>
+
+<li> <code>TCPChecksum</code>: 如果 TCP 校验和
+有效，则设置为 <code>1</code>，否则为 <code>0</code>。</li>
+
+<li> <code>UDPChecksum</code>: 如果 UDP 校验和
+有效，则设置为 <code>1</code>，否则为 <code>0</code>。</li>
+
+<li> <code>Network.IfIdx</code>: 数据包到达的接口索引
+    （对于入站数据包），或将要发送的接口索引（对于出站数据包）。</li>
+
+<li> <code>Network.SubIfIdx</code>: <code>IfIdx</code> 的子接口索引。</li>
+
+<li> <code>Flow.EndpointId</code>: 流的端点 ID。</li> <!-- 原文为 EndpointId，但通常理解为 Endpoint -->
+
+<li> <code>Flow.ParentEndpointId</code>: 流的父端点 ID。</li>
+
+<li> <code>Flow.ProcessId</code>: 与流关联的进程 ID。</li>
+
+<li> <code>Flow.LocalAddr</code>、<code>Flow.RemoteAddr</code>、
+     <code>Flow.LocalPort</code>、<code>Flow.RemotePort</code> 和
+     <code>Flow.Protocol</code>: 与流关联的网络五元组。</li>
+
+<li> <code>Socket.EndpointId</code>: 套接字操作的端点 ID。</li>
+
+<li> <code>Socket.ParentEndpointId</code>: 套接字操作的父端点 ID。</li>
+
+<li> <code>Socket.ProcessId</code>: 与套接字操作关联的进程 ID。</li>
+
+<li> <code>Socket.LocalAddr</code>、<code>Socket.RemoteAddr</code>、
+     <code>Socket.LocalPort</code>、<code>Socket.RemotePort</code> 和
+     <code>Socket.Protocol</code>: 与套接字操作关联的网络五元组。</li>
+
+<li> <code>Reflect.Timestamp</code>: 指示句柄打开时间的时间戳。</li>
+
+<li> <code>Reflect.ProcessId</code>: 打开句柄的进程 ID。</li>
+
+<li> <code>Reflect.Layer</code>、<code>Reflect.Flags</code> 和
+     <code>Reflect.Priority</code>: 打开句柄的
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 参数。</li>
+
+</ul>
+
+<p>
+<b>备注</b><br>
+<a href="#divert_address"><code>WINDIVERT_ADDRESS</code></a> 结构体
+代表捕获或注入的数据包的“地址”。
+地址包括数据包的时间戳、层、事件、标志和
+特定于层的数据。
+当数据包/事件被捕获时，所有字段都由 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 设置。
+当数据包被注入时，只有某些字段被
+<a href="#divert_send"><code>WinDivertSend()</code></a> 使用。
+</p><p>
+<code>Timestamp</code> 指示数据包/事件首次被 WinDivert 捕获的时间。
+它使用与
+<a href="https://msdn.microsoft.com/en-us/library/windows/desktop/ms644904(v=vs.85).aspx"><code>QueryPerformanceCounter()</code></a> 相同的时钟。
+</p><p>
+<code>Layer</code> 指示传递给
+<a href="#divert_open"><code>WinDivertOpen()</code></a> 的<i>层</i>参数
+(<a href="#divert_layers"><code>WINDIVERT_LAYER_*</code></a>)。
+它包含在地址中以使结构体自包含。
+</p><p>
+<code>Event</code> 指示捕获的特定于层的<i>事件</i>
+(<a href="#divert_events"><code>WINDIVERT_EVENT_*</code></a>)。
+</p><p>
+<code>Outbound</code> 标志为<i>出站</i>
+数据包/事件设置，并为<i>入站</i>或无方向的数据包/事件清除。
+</p><p>
+<code>Loopback</code> 标志为<i>环回</i>数据包设置。
+请注意，Windows 将任何源自当前计算机并最终到达当前计算机的数据包
+视为环回数据包，因此环回数据包不
+限于 localhost 地址。
+请注意，WinDivert 将环回数据包视为
+<i>仅出站</i>，并且不会在入站路径上捕获环回数据包。
+</p><p>
+<code>Impostor</code> 标志为<i>伪装</i>数据包设置。
+伪装数据包是由另一个驱动程序注入的任何数据包，而不是
+源自网络或 Windows TCP/IP 堆栈。
+伪装数据包存在问题，因为它们可能导致无限循环，
+其中由 <a href="#divert_send"><code>WinDivertSend()</code></a> 注入的数据包
+再次被 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 捕获。
+有关更多信息，请参见 <a href="#divert_send"><code>WinDivertSend()</code></a>。
+</p><p>
+<code>IPv6</code> 标志为 <i>IPv6</i> 数据包/事件设置，并为 <i>IPv4</i> 数据包/事件清除。
+</p><p>
+<code>*Checksum</code> 标志指示数据包是否具有有效的校验和。
+当启用<i>IP/TCP/UDP 校验和卸载</i>时，
+捕获的数据包可能没有有效的校验和。
+无效的校验和可能是任意值。
+</p><p>
+<code>Network.*</code> 字段仅在
+<code>WINDIVERT_LAYER_NETWORK</code> 和
+<code>WINDIVERT_LAYER_NETWORK_FORWARD</code> 层有效。
+<code>Network.IfIdx</code>/<code>Network.SubIfIdx</code> 指示数据包的
+网络适配器（也称为接口）索引。
+对于<i>出站</i>数据包，这些值将被忽略。
+</p><p>
+<code>Flow.*</code> 字段仅在
+<code>WINDIVERT_LAYER_FLOW</code> 层有效。
+<code>Flow.ProcessId</code> 是创建流（对于出站）或接收流（对于入站）的进程的<i>ID</i>。
+(<code>Flow.LocalAddr</code>, <code>Flow.LocalPort</code>,
+ <code>Flow.RemoteAddr</code>, <code>Flow.RemotePort</code>, <code>Flow.Protocol</code>)
+字段构成与流关联的网络五元组。
+对于 IPv4，<code>Flow.LocalAddr</code> 和 <code>Flow.RemoteAddr</code>
+字段将是 IPv4 映射的 IPv6 地址，
+例如，IPv4 地址 <code>X.Y.Z.W</code> 将表示为
+<code>::ffff:X.Y.Z.W</code>。
+</p><p>
+<code>Socket.*</code> 字段仅在
+<code>WINDIVERT_LAYER_SOCKET</code> 层有效。
+<code>Socket.ProcessId</code> 是执行套接字操作的进程的<i>ID</i>。
+(<code>Socket.LocalAddr</code>, <code>Socket.LocalPort</code>,
+ <code>Socket.RemoteAddr</code>, <code>Socket.RemotePort</code>,
+ <code>Socket.Protocol</code>)
+字段构成与操作关联的网络五元组。
+对于 IPv4，<code>Socket.LocalAddr</code> 和 <code>Socket.RemoteAddr</code>
+字段将是 IPv4 映射的 IPv6 地址。
+<code>WINDIVERT_EVENT_SOCKET_BIND</code> 和
+<code>WINDIVERT_EVENT_SOCKET_LISTEN</code> 事件可以在连接尝试之前发生，
+这意味着这些事件的
+<code>Socket.RemoteAddr</code> 和 <code>Socket.RemotePort</code> 字段
+将为零。
+</p><p>
+<code>Reflect.*</code> 字段仅在
+<code>WINDIVERT_LAYER_REFLECT</code> 层有效。
+<code>Reflect.ProcessId</code> 是打开 WinDivert 句柄的进程的<i>ID</i>。
+<code>Reflect.Timestamp</code> 字段是指示句柄何时打开的时间戳，
+使用与
+<a href="https://msdn.microsoft.com/en-us/library/windows/desktop/ms644904(v=vs.85).aspx"><code>QueryPerformanceCounter()</code></a> 相同的时钟。
+<code>Reflect.Layer</code>、<code>Reflect.Flags</code> 和
+    <code>Reflect.Priority</code> 字段对应于
+打开句柄的 <a href="#divert_open"><code>WinDivertOpen()</code></a> 参数。
+</p><p>
+<a href="#divert_send"><code>WinDivertSend()</code></a> 会忽略大多数地址字段。
+例外情况是
+<code>Outbound</code> (仅适用于 <code>WINDIVERT_LAYER_NETWORK</code>)，
+<code>Impostor</code>、<code>IPChecksum</code>、<code>TCPChecksum</code>、
+<code>UDPChecksum</code>、<code>Network.IfIdx</code> 和
+<code>Network.SubIfIdx</code>。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_open"><h3>5.4 WinDivertOpen</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+HANDLE <b>WinDivertOpen</b>(
+    __in const char *filter,
+    __in WINDIVERT_LAYER layer,
+    __in INT16 priority,
+    __in UINT64 flags
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>filter</code>: 以 WinDivert
+    <a href="#filter_language">过滤器语言</a>指定的包过滤器字符串。</li>
+
+<li> <code>layer</code>: 层。</li>
+
+<li> <code>priority</code>: 句柄的优先级。</li>
+
+<li> <code>flags</code>: 附加标志。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+成功时返回有效的 WinDivert 句柄，如果发生错误则返回
+<code>INVALID_HANDLE_VALUE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+常见错误包括：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+名称
+</th>
+
+<th>
+代码
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_FILE_NOT_FOUND</code>
+</td>
+
+<td>
+2
+</td>
+
+<td>
+未找到驱动程序文件
+<code>WinDivert32.sys</code> 或 <code>WinDivert64.sys</code>。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_ACCESS_DENIED</code>
+</td>
+
+<td>
+5
+</td>
+
+<td>
+调用应用程序不具有管理员权限。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_INVALID_PARAMETER</code>
+</td>
+
+<td>
+87
+</td>
+
+<td>
+这表示无效的数据包过滤器字符串、层、优先级或标志。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_INVALID_IMAGE_HASH</code>
+</td>
+
+<td>
+577
+</td>
+
+<td>
+<code>WinDivert32.sys</code> 或 <code>WinDivert64.sys</code> 驱动程序没有
+有效的数字签名
+（参见上面的<a href="#driver_signing">驱动程序签名要求</a>）。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_DRIVER_FAILED_PRIOR_UNLOAD</code>
+</td>
+
+<td>
+654
+</td>
+
+<td>
+当前加载了不兼容版本的 WinDivert 驱动程序。
+</td>
+
+<tr>
+
+<td>
+<code>ERROR_SERVICE_DOES_NOT_EXIST</code>
+</td>
+
+<td>
+1060
+</td>
+
+<td>
+句柄以 <code>WINDIVERT_FLAG_NO_INSTALL</code> 标志打开，并且
+WinDivert 驱动程序尚未安装。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_DRIVER_BLOCKED</code>
+</td>
+
+<td>
+1275
+</td>
+
+<td>
+此错误由多种原因引起，包括：
+<ol>
+
+<li> WinDivert 驱动程序被安全软件阻止；或</li>
+
+<li> 您正在使用不支持驱动程序的虚拟化环境。</li>
+
+</ol>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>EPT_S_NOT_REGISTERED</code>
+</td>
+
+<td>
+1753
+</td>
+
+<td>
+当<i>基本筛选引擎</i>服务被禁用时，会发生此错误。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+<b>备注</b><br>
+为给定的过滤器打开一个 WinDivert 句柄。
+除非由 <code>flags</code> 另行指定，否则任何与过滤器匹配的数据包或事件都将被转向到该句柄。
+应用程序可以使用 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 读取被转向的数据包/事件。
+</p>
+
+<p>
+典型的应用程序只对所有网络流量或事件的子集感兴趣。
+在这种情况下，过滤器应<i>尽可能精确地匹配</i>感兴趣的子集。
+这避免了将数据包转向到用户模式应用程序所引入的不必要开销。
+有关更多信息，请参见<a href="#filter_language">过滤器语言</a>部分。
+</p>
+
+<p>
+WinDivert 句柄的<i>层</i>由 <code>layer</code> 参数确定。
+有关更多信息，请参见 <a href="#divert_layers"><code>WINDIVERT_LAYER</code></a>。
+当前支持以下层：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+层
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK = 0</code>
+</td>
+
+<td>
+进出本地计算机的网络数据包。
+这是默认层。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK_FORWARD</code>
+</td>
+
+<td>
+通过本地计算机的网络数据包。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_FLOW</code>
+</td>
+
+<td>
+网络流建立/删除事件。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_SOCKET</code>
+</td>
+
+<td>
+套接字操作事件。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_REFLECT</code>
+</td>
+
+<td>
+WinDivert 句柄事件。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+不同的 WinDivert 句柄可以通过
+<code>priority</code> 参数分配不同的优先级。
+数据包会先转向到优先级较高的句柄，然后再转向到优先级较低的句柄。
+由句柄注入的数据包随后会转向到下一个优先级的句柄，
+依此类推，前提是数据包与该句柄的过滤器匹配。
+每个优先级级别的数据包只会被转向一次，因此除非句柄使用互斥的过滤器，否则不应共享优先级级别。
+否则，无法确定哪个句柄将首先接收到数据包。
+较高的 <code>priority</code> 值表示较高的优先级，
+<code>WINDIVERT_PRIORITY_HIGHEST</code> 是最高优先级，
+<code>0</code> 是中间（也是一个好的默认值）优先级，
+而 <code>WINDIVERT_PRIORITY_LOWEST</code> 是最低优先级。
+</p>
+
+<p>
+不同的标志会影响打开句柄的行为。
+支持以下标志：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+标志
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_SNIFF</code>
+</td>
+
+<td>
+此标志以<i>数据包嗅探</i>模式打开 WinDivert 句柄。
+在数据包嗅探模式下，原始数据包不会被丢弃并转向（默认行为），而是被复制并转向。
+此模式对于实现类似于当前使用 <code>Winpcap</code> 的应用程序的数据包嗅探工具很有用。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_DROP</code>
+</td>
+
+<td>
+此标志表示用户应用程序不打算使用 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 读取匹配的数据包，
+而是应静默丢弃这些数据包。
+这对于使用 WinDivert <a href="#filter_language">过滤器语言</a>实现简单的数据包过滤器很有用。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_RECV_ONLY</code>
+</td>
+
+<td>
+此标志强制句柄进入“仅接收”模式，从而有效地禁用 <a href="#divert_send"><code>WinDivertSend()</code></a>。
+这意味着可以阻止/捕获数据包或事件，但不能注入它们。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_READ_ONLY</code>
+</td>
+
+<td>
+<code>WINDIVERT_FLAG_RECV_ONLY</code> 的别名。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_SEND_ONLY</code>
+</td>
+
+<td>
+此标志强制句柄进入“仅发送”模式，从而有效地禁用 <a href="#divert_recv"><code>WinDivertRecv()</code></a>。
+这意味着可以注入数据包或事件，但不能阻止/捕获它们。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_WRITE_ONLY</code>
+</td>
+
+<td>
+<code>WINDIVERT_FLAG_SEND_ONLY</code> 的别名。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_NO_INSTALL</code>
+</td>
+
+<td>
+如果 WinDivert 驱动程序尚未安装，此标志会导致 <code>WinDivertOpen()</code> 失败并返回
+<code>ERROR_SERVICE_DOES_NOT_EXIST</code>。
+此标志对于使用
+<code>WINDIVERT_LAYER_REFLECT</code> 句柄查询 WinDivert 状态很有用。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_FLAG_FRAGMENTS</code>
+</td>
+
+<td>
+如果设置，句柄将捕获入站 IP 分片，但不捕获入站重组的 IP 数据包。
+否则，如果未设置（默认），句柄将捕获入站重组的 IP 数据包，但不捕获入站 IP 分片。
+此标志仅影响
+<code>WINDIVERT_LAYER_NETWORK</code> 层的入站数据包，否则该标志将被忽略。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+请注意，任何
+<code>(WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_DROP)</code> 或
+<code>(WINDIVERT_FLAG_RECV_ONLY | WINDIVERT_FLAG_SEND_ONLY)</code>
+的组合都被认为是无效的。
+</p>
+
+<p>
+某些层具有强制标志，如下所列：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+层
+</th>
+
+<th>
+必需标志
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_FLOW</code>
+</td>
+
+<td>
+<code>WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY</code>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_SOCKET</code>
+</td>
+
+<td>
+<code>WINDIVERT_FLAG_RECV_ONLY</code>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_REFLECT</code>
+</td>
+
+<td>
+<code>WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY</code>
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+</dd></dl>
+
+
+<a name="divert_recv"><h3>5.5 WinDivertRecv</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertRecv</b>(
+    __in HANDLE handle,
+    __out_opt PVOID pPacket,
+    __in UINT packetLen,
+    __out_opt UINT *pRecvLen,
+    __out_opt WINDIVERT_ADDRESS *pAddr
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+<li> <code>pPacket</code>: 用于存储捕获的数据包的可选缓冲区。</li>
+
+<li> <code>packetLen</code>: <code>pPacket</code> 缓冲区的长度。</li>
+
+<li> <code>pRecvLen</code>: 写入 <code>pPacket</code> 的总字节数。
+     如果不需要此信息，可以为 <code>NULL</code>。</li>
+
+<li> <code>pAddr</code>: 用于存储捕获的数据包/事件的
+    <a href="#divert_address">地址</a>的可选缓冲区。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功接收到数据包/事件，则返回 <code>TRUE</code>；如果发生错误，则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+常见错误包括：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+名称
+</th>
+
+<th>
+代码
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_INSUFFICIENT_BUFFER</code>
+</td>
+
+<td>
+122
+</td>
+
+<td>
+捕获的数据包大于 <code>pPacket</code> 缓冲区。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_NO_DATA</code>
+</td>
+
+<td>
+232
+</td>
+
+<td>
+句柄已使用
+<a href="#divert_shutdown"><code>WinDivertShutdown()</code></a> 关闭，并且数据包队列为空。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+<b>备注</b><br>
+接收与传递给
+<a href="#divert_open"><code>WinDivertOpen()</code></a> 的过滤器匹配的单个捕获的数据包/事件。
+接收到的数据包/事件保证与过滤器匹配。
+</p><p>
+只有某些 <a href="#divert_layers">层</a>可以捕获数据包/数据，总结如下：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+层
+</th>
+
+<th>
+数据？
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK</code>
+</td>
+
+<td>
+&#10004;
+</td>
+
+<td>
+网络数据包。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK_FORWARD</code>
+</td>
+
+<td>
+&#10004;
+</td>
+
+<td>
+网络数据包。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_FLOW</code>
+</td>
+
+<td>
+</td>
+
+<td>
+-
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_SOCKET</code>
+</td>
+
+<td>
+</td>
+
+<td>
+-
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_REFLECT</code>
+</td>
+
+<td>
+&#10004;
+</td>
+
+<td>
+过滤器对象。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+对于支持捕获的层，捕获的数据包/数据将被写入
+<code>pPacket</code> 缓冲区。
+如果非 <code>NULL</code>，则写入 <code>pPacket</code> 的总字节数
+将写入 <code>pRecvLen</code>。
+如果 <code>pPacket</code> 缓冲区太小，数据包将被
+截断，并且操作将失败并返回
+<code>ERROR_INSUFFICIENT_BUFFER</code> 错误代码。
+如果应用程序仅打算接收数据包的一部分，
+例如仅 IP 头部，则可以忽略此错误。
+对于不捕获数据包/数据的层，<code>pPacket</code> 参数
+应为 <code>NULL</code>，<code>packetLen</code> 应为零。
+</p><p>
+如果非 <code>NULL</code>，数据包/事件的<a href="#divert_address">地址</a>
+将写入 <code>pAddr</code> 缓冲区。
+</p><p>
+应用程序应在成功调用 <a href="#divert_open"><code>WinDivertOpen()</code></a> 之后
+<i>尽快</i>调用 <a href="#divert_recv"><code>WinDivertRecv()</code></a>。
+当 WinDivert 句柄打开时，任何与过滤器匹配的数据包/事件都将被
+捕获并排队，直到由
+<a href="#divert_recv"><code>WinDivertRecv()</code></a> 处理。
+数据包/事件不会无限期排队，如果未及时
+处理，可能会丢失数据。
+数据包/事件排队的时间量可以使用
+<a href="#divert_set_param"><code>WinDivertSetParam()</code></a> 函数控制。
+</p><p>
+捕获的数据包保证具有正确的校验和或相应的
+<code>*Checksum</code> 标志未设置
+（参见 <a href="#divert_address"><code>WINDIVERT_ADDRESS</code></a>）。
+</p><p>
+不应在设置了 <code>WINDIVERT_FLAG_DROP</code> 标志的任何
+WinDivert 句柄上使用 <a href="#divert_recv"><code>WinDivertRecv()</code></a>。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_recv_ex"><h3>5.6 WinDivertRecvEx</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertRecvEx</b>(
+    __in HANDLE handle,
+    __out VOID *pPacket,
+    __in UINT packetLen,
+    __out_opt UINT *pRecvLen,
+    __in UINT64 flags,
+    __out_opt WINDIVERT_ADDRESS *pAddr,
+    __inout_opt UINT *pAddrLen,
+    __inout_opt LPOVERLAPPED lpOverlapped
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+<li> <code>pPacket</code>: 用于存储捕获的数据包的缓冲区。</li>
+
+<li> <code>packetLen</code>: <code>pPacket</code> 缓冲区的长度（以字节为单位）。</li>
+
+<li> <code>pRecvLen</code>: 写入 <code>pPacket</code> 的总字节数。
+     如果不需要此信息，可以为 <code>NULL</code>。</li>
+
+<li> <code>flags</code>: 保留，设置为零。</li>
+
+<li> <code>pAddr</code>: 捕获的数据包的
+    <a href="#divert_address"><code>WINDIVERT_ADDRESS</code></a>。</li>
+
+<li> <code>pAddrLen</code>: 最初，指向 <code>pAddr</code>
+    缓冲区长度（以字节为单位）的指针。
+    此值将更新为写入 <code>pAddr</code> 的总字节数。
+    如果为 <code>NULL</code>，则假定固定长度为 <code>sizeof(WINDIVERT_ADDRESS)</code>。</li>
+
+<li> <code>lpOverlapped</code>: 指向 <code>OVERLAPPED</code>
+     结构体的可选指针。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功接收到数据包，则返回 <code>TRUE</code>，否则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取原因。
+错误代码 <code>ERROR_IO_PENDING</code> 表示重叠操作已成功启动，
+完成情况将在稍后指示。
+所有其他代码表示错误。
+</p><p>
+<b>备注</b><br>
+此函数等效于
+<a href="#divert_recv"><code>WinDivertRecv()</code></a>，但有以下例外：
+</p>
+
+<ul>
+
+<li> 通过 <code>lpOverlapped</code> 参数支持<i>重叠 I/O</i>。</li>
+
+<li> 支持<i>批量 I/O</i>（即一次接收多个数据包）。</li>
+
+</ul>
+
+<p>
+批量 I/O 使得可以使用单个操作一次接收多达 <code>WINDIVERT_BATCH_MAX</code>
+个数据包，从而减少内核/用户模式上下文切换的次数并提高性能。
+要启用批量 I/O：
+</p>
+
+<ol>
+
+<li> 将包含多个 <code>WINDIVERT_ADDRESS</code> 的数组传递给 <code>pAddr</code>；</li>
+
+<li> 将 <code>pAddrLen</code> 设置为 <code>pAddr</code> 缓冲区的总大小（以字节为单位）；以及</li>
+
+<li> 确保 <code>pPacket</code> 指向足够大的缓冲区，能够接收多个数据包。</li>
+
+</ol>
+
+<p>
+例如：
+</p>
+
+<pre>
+    UINT8 packets[10 * MTU];        // 最多 10 个数据包的空间
+    WINDIVERT_ADDRESS addr[10];     // 最多 10 个数据包的地址
+    UINT addr_len = sizeof(addr);
+    BOOL result = WinDivertRecvEx(handle, packets, ..., addr, &amp;addr_len, ...);
+</pre>
+
+<p>
+成功完成后，<code>pAddrLen</code> 指向的值将更新为实际接收到的地址字节总数。
+例如，如果总共接收到 <code>5</code> 个数据包，则
+<code>pAddrLen</code> 指向的值将设置为
+<code>(5*sizeof(WINDIVERT_ADDRESS))</code>。
+接收到的数据包会连续（即没有间隙）地打包到
+<code>pPacket</code> 缓冲区中。
+</dd></dl>
+
+
+<a name="divert_send"><h3>5.7 WinDivertSend</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertSend</b>(
+    __in HANDLE handle,
+    __in const VOID *pPacket,
+    __in UINT packetLen,
+    __out_opt UINT *pSendLen,
+    __in const WINDIVERT_ADDRESS *pAddr
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+<li> <code>pPacket</code>: 包含要注入的数据包的缓冲区。</li>
+
+<li> <code>packetLen</code>: <code>pPacket</code> 缓冲区的总长度。</li>
+
+<li> <code>pSendLen</code>: 注入的总字节数。
+     如果不需要此信息，可以为 <code>NULL</code>。</li>
+
+<li> <code>pAddr</code>: 注入数据包的
+    <a href="#divert_address">地址</a>。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功注入数据包，则返回 <code>TRUE</code>；如果发生错误，则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+常见错误包括：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+名称
+</th>
+
+<th>
+代码
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>ERROR_HOST_UNREACHABLE</code>
+</td>
+
+<td>
+1232
+</td>
+
+<td>
+当注入<i>伪装</i>数据包（<code>pAddr-&gt;Impostor</code> 设置为 <code>1</code>）
+并且 <code>ip.TTL</code> 或 <code>ipv6.HopLimit</code> 字段变为零时，会发生此错误。
+这是针对伪装数据包引起的无限循环的“最后手段”防御。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+<b>备注</b><br>
+将数据包注入网络堆栈。
+注入的数据包可以是
+从 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 接收到的数据包，
+修改后的版本，或全新的数据包。
+注入的数据包可以被具有较低优先级的其他 WinDivert 句柄再次捕获和转向。
+</p><p>
+只有 <code>WINDIVERT_LAYER_NETWORK</code> 和
+<code>WINDIVERT_LAYER_NETWORK_FORWARD</code> <a href="#divert_layers">层</a>
+支持数据包注入，总结如下：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="40%">
+
+<tr>
+
+<th>
+层
+</th>
+
+<th>
+注入？
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK</code>
+</td>
+
+<td>
+&#10004;
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_NETWORK_FORWARD</code>
+</td>
+
+<td>
+&#10004;
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_FLOW</code>
+</td>
+
+<td>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_SOCKET</code>
+</td>
+
+<td>
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_LAYER_REFLECT</code>
+</td>
+
+<td>
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+对于 <code>WINDIVERT_LAYER_NETWORK</code> 层，
+<code>pAddr-&gt;Outbound</code> 值决定了数据包注入的方向。
+如果 <code>pAddr-&gt;Outbound</code> 字段为 <code>1</code>，
+数据包将被注入到<i>出站</i>路径
+（即离开本地计算机的数据包）。
+否则，如果 <code>pAddr-&gt;Outbound</code> 为 <code>0</code>，
+数据包将被注入到<i>入站</i>路径（即到达本地计算机的数据包）。
+请注意，只有 <code>Outbound</code> 字段，而<i>不是</i>注入数据包中的 IP 地址，
+决定了数据包的方向。
+</p><p>
+对于注入到<i>入站</i>路径的数据包，
+<code>pAddr-&gt;Network.IfIdx</code> 和
+<code>pAddr-&gt;Network.SubIfIdx</code> 字段假定包含有效的
+接口号。
+这些可以从 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 中检索
+（用于数据包修改），
+或从 <a href="http://msdn.microsoft.com/en-us/library/aa366073%28v=VS.85%29.aspx">IP Helper API</a> 中检索。
+</p><p>
+对于<i>出站</i>注入的数据包，<code>IfIdx</code> 和 <code>SubIfIdx</code>
+字段当前被忽略，可以是任意值。
+在出站路径上注入入站数据包<i>可能</i>有效（对于某些类型的数据包），
+但这应被视为“未记录”的行为，
+并且将来可能会更改。
+</p><p>
+对于<i>伪装</i>数据包（其中 <code>pAddr-&gt;Impostor</code> 设置为
+<code>1</code>），WinDivert 将在重新注入之前自动递减
+<code>ip.TTL</code> 或 <code>ipv6.HopLimit</code> 字段。
+这是为了缓解无限循环，因为 WinDivert 无法阻止
+伪装数据包再次被
+<a href="#divert_recv"><code>WinDivertRecv()</code></a> 捕获。
+</p><p>
+注入的数据包必须具有正确的校验和或相应的
+<code>pAddr-&gt;*Checksum</code> 标志未设置。
+由 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 捕获的数据包/地址对
+保证满足此条件，因此可以未经修改地重新注入，而无需重新计算
+校验和。
+否则，如果需要修改，
+可以使用
+<a href="#divert_helper_calc_checksums"><code>WinDivertHelperCalcChecksums()</code></a>
+函数重新计算校验和。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_send_ex"><h3>5.8 WinDivertSendEx</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertSendEx</b>(
+    __in HANDLE handle,
+    __in const VOID *pPacket,
+    __in UINT packetLen,
+    __out_opt UINT *pSendLen,
+    __in UINT64 flags,
+    __in const WINDIVERT_ADDRESS *pAddr,
+    __in UINT addrLen,
+    __inout_opt LPOVERLAPPED lpOverlapped
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+<li> <code>pPacket</code>: 包含要注入的数据包的缓冲区。</li>
+
+<li> <code>packetLen</code>: 缓冲区 <code>pPacket</code> 的总长度。</li>
+
+<li> <code>pSendLen</code>: 注入的总字节数。
+     如果不需要此信息，可以为 <code>NULL</code>。</li>
+
+<li> <code>flags</code>: 保留，设置为零。</li>
+
+<li> <code>pAddr</code>: 注入数据包的
+     <a href="#divert_address"><code>地址</code></a>。</li>
+
+<li> <code>addrLen</code>: <code>pAddr</code> 缓冲区的总长度（以字节为单位）。</li>
+
+<li> <code>lpOverlapped</code>: 指向 <code>OVERLAPPED</code>
+     结构体的可选指针。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功注入数据包，则返回 <code>TRUE</code>，否则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取原因。
+错误代码 <code>ERROR_IO_PENDING</code> 表示重叠操作已成功启动，
+完成情况将在稍后指示。
+所有其他代码表示错误。
+</p><p>
+<b>备注</b><br>
+此函数等效于
+<a href="#divert_send"><code>WinDivertSend()</code></a>，但有以下例外： <!-- 原文为 divert_recv，应为 divert_send -->
+</p>
+
+<ul>
+
+<li> 通过 <code>lpOverlapped</code> 参数支持<i>重叠 I/O</i>。</li>
+
+<li> 支持<i>批量 I/O</i>（即一次发送多个数据包）。</li>
+
+</ul>
+
+<p>
+批量 I/O 使得可以使用单个操作一次发送多达 <code>WINDIVERT_BATCH_MAX</code>
+个数据包，从而减少内核/用户模式上下文切换的次数并提高性能。
+要使用批量 I/O：
+</p>
+
+<ol>
+
+<li> 将 <i>N</i> 个数据包打包到 <code>pPacket</code> 缓冲区中
+     （数据包之间没有间隙）；</li>
+
+<li> 将 <code>packetLen</code> 设置为 <i>N</i> 个数据包长度的总和；
+     </li>
+
+<li> 将相应的 <i>N</i> 个 <code>WINDIVERT_ADDRESS</code>
+     地址结构打包到 <code>pAddr</code> 缓冲区中；以及 </li>
+
+<li> 将 <code>addrLen</code> 设置为 <code>pAddr</code> 缓冲区的总大小（以字节为单位）。</li>
+
+</ol>
+
+</dd></dl>
+
+
+<a name="divert_shutdown"><h3>5.9 WinDivertShutdown</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertShutdown</b>(
+    __in HANDLE handle,
+    __in WINDIVERT_SHUTDOWN how);  // 原文此处多一个 );
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+<li> <code>how</code>: 一个 <code>WINDIVERT_SHUTDOWN</code> 值，指示应如何
+     关闭句柄。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功，则返回 <code>TRUE</code>；如果发生错误，则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+此操作导致 WinDivert 句柄的全部或部分关闭。
+<code>how</code> 的可能值为：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+How
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_SHUTDOWN_RECV</code>
+</td>
+
+<td>
+停止为 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 排队新数据包。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_SHUTDOWN_SEND</code>
+</td>
+
+<td>
+停止通过 <a href="#divert_send"><code>WinDivertSend()</code></a> 注入新数据包。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_SHUTDOWN_BOTH</code>
+</td>
+
+<td>
+等效于 <code>(WINDIVERT_SHUTDOWN_RECV | WINDIVERT_SHUTDOWN_SEND)</code>。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+<p>
+请注意，在 <code>WINDIVERT_SHUTDOWN_RECV</code> 之后，先前排队的数据包仍然可以接收。
+当数据包队列为空时，
+<a href="#divert_recv"><code>WinDivertRecv()</code></a>
+将失败并返回 <code>ERROR_NO_DATA</code>。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_close"><h3>5.10 WinDivertClose</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertClose</b>(
+    __in HANDLE handle
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功，则返回 <code>TRUE</code>；如果发生错误，则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+关闭由 <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的 WinDivert 句柄。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_set_param"><h3>5.11 WinDivertSetParam</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertSetParam</b>(
+    __in HANDLE handle,
+    __in WINDIVERT_PARAM param,
+    __in UINT64 value);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+<li> <code>param</code>: WinDivert 参数名称。</li>
+
+<li> <code>value</code>: 参数的新值。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功，则返回 <code>TRUE</code>；如果发生错误，则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+设置一个 WinDivert 参数。
+当前定义了以下 WinDivert 参数。
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+参数
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_PARAM_QUEUE_LENGTH</code>
+</td>
+
+<td>
+设置 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 的数据包队列的最大长度。
+默认值为 <code>WINDIVERT_PARAM_QUEUE_LENGTH_DEFAULT</code>，
+最小值为 <code>WINDIVERT_PARAM_QUEUE_LENGTH_MIN</code>，最大值为
+<code>WINDIVERT_PARAM_QUEUE_LENGTH_MAX</code>。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_PARAM_QUEUE_TIME</code>
+</td>
+
+<td>
+设置数据包在自动丢弃之前可以排队的最小时间（以毫秒为单位）。
+数据包不能无限期排队，理想情况下，应用程序应尽快处理数据包。
+请注意，这设置的是数据包在可以被丢弃之前可以排队的<i>最小</i>时间。
+实际时间可能会超过此值。
+当前默认值为 <code>WINDIVERT_PARAM_QUEUE_TIME_DEFAULT</code>，
+最小值为 <code>WINDIVERT_PARAM_QUEUE_TIME_MIN</code>，
+最大值为 <code>WINDIVERT_PARAM_QUEUE_TIME_MAX</code>。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_PARAM_QUEUE_SIZE</code>
+</td>
+
+<td>
+设置 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 的数据包队列中可以存储的最大字节数。
+当前默认值为 <code>WINDIVERT_PARAM_QUEUE_SIZE_DEFAULT</code>，
+最小值为 <code>WINDIVERT_PARAM_QUEUE_SIZE_MIN</code>，
+最大值为 <code>WINDIVERT_PARAM_QUEUE_SIZE_MAX</code>。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+</dd></dl>
+
+
+<a name="divert_get_param"><h3>5.12 WinDivertGetParam</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertGetParam</b>(
+    __in HANDLE handle,
+    __in WINDIVERT_PARAM param,
+    __out UINT64 *pValue);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>handle</code>: 由
+     <a href="#divert_open"><code>WinDivertOpen()</code></a> 创建的有效 WinDivert 句柄。</li>
+
+<li> <code>param</code>: WinDivert 参数名称。</li>
+
+<li> <code>value</code>: 参数的当前值。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功，则返回 <code>TRUE</code>；如果发生错误，则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+获取一个 WinDivert 参数。
+此函数支持
+<a href="#divert_set_param"><code>WinDivertSetParam()</code></a> 中的所有参数，
+以及以下附加的“只读”参数：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr>
+
+<th>
+参数
+</th>
+
+<th>
+描述
+</th>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_PARAM_VERSION_MAJOR</code>
+</td>
+
+<td>
+返回驱动程序的主版本号。
+</td>
+
+</tr>
+
+<tr>
+
+<td>
+<code>WINDIVERT_PARAM_VERSION_MINOR</code>
+</td>
+
+<td>
+返回驱动程序的次版本号。
+</td>
+
+</tr>
+
+</table>
+
+</center>
+
+</dd></dl>
+
+
+<hr>
+
+<a name="helper_programming_api"><h2>6. 辅助编程 API</h2></a>
+
+
+WinDivert 辅助编程 API 是一组定义和函数，旨在使编写 WinDivert 应用程序更容易。
+辅助 API 的使用是可选的。
+
+
+<a name="divert_iphdr"><h3>6.1 WINDIVERT_IPHDR</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef struct
+{
+    UINT8  HdrLength:4;
+    UINT8  Version:4;
+    UINT8  TOS;
+    UINT16 Length;
+    UINT16 Id;
+    UINT16 <i>...</i>; // 标记、分段偏移量
+    UINT8  TTL;
+    UINT8  Protocol;
+    UINT16 Checksum;
+    UINT32 SrcAddr;
+    UINT32 DstAddr;
+} <b>WINDIVERT_IPHDR</b>, *<b>PWINDIVERT_IPHDR</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p>
+<b>字段</b><br>
+更多信息请参见 <a href="http://en.wikipedia.org/wiki/IPv4#Packet_structure">此处</a>。
+</p><p>
+<b>备注</b><br>
+IPv4 头部定义。
+</p><p>
+以下字段只能使用以下宏定义进行获取/设置：
+</p>
+
+<ul>
+
+<li><i>FragOff</i> 使用 <code>WINDIVERT_IPHDR_GET_FRAGOFF(<i>hdr</i>)</code> 和
+    <code>WINDIVERT_IPHDR_SET_FRAGOFF(<i>hdr</i>, <i>val</i>)</code></li>
+
+<li><i>MF</i> 使用 <code>WINDIVERT_IPHDR_GET_MF(<i>hdr</i>)</code> 和
+    <code>WINDIVERT_IPHDR_SET_MF(<i>hdr</i>, <i>val</i>)</code></li>
+
+<li><i>DF</i> 使用 <code>WINDIVERT_IPHDR_GET_DF(<i>hdr</i>)</code> 和
+    <code>WINDIVERT_IPHDR_SET_DF(<i>hdr</i>, <i>val</i>)</code></li>
+
+<li><i>Reserved</i> 使用 <code>WINDIVERT_IPHDR_GET_RESERVED(<i>hdr</i>)</code> 和
+    <code>WINDIVERT_IPHDR_SET_RESERVED(<i>hdr</i>, <i>val</i>)</code></li>
+
+</ul>
+
+</dl></dd>
+
+
+<a name="divert_ipv6hdr"><h3>6.2 WINDIVERT_IPV6HDR</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef struct
+{
+    UINT32 Version:4;
+    UINT32 ...:28; // 流量类别、流标签
+    UINT16 Length; // 载荷长度
+    UINT8  NextHdr;
+    UINT8  HopLimit;
+    UINT32 SrcAddr[4];
+    UINT32 DstAddr[4];
+} <b>WINDIVERT_IPV6HDR</b>, *<b>PWINDIVERT_IPV6HDR</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p>
+<b>字段</b><br>
+更多信息请参见 <a href="http://en.wikipedia.org/wiki/IPv6_packet#Fixed_header">此处</a>。
+</p><p>
+<b>备注</b><br>
+IPv6 头部定义。
+</p><p>
+以下字段只能使用以下宏定义进行获取/设置：
+</p>
+
+<ul>
+
+<li><i>TrafficClass</i> 使用
+    <code>WINDIVERT_IPV6HDR_GET_TRAFFICCLASS(<i>hdr</i>)</code> 和
+    <code>WINDIVERT_IPV6HDR_SET_TRAFFICCLASS(<i>hdr</i>, <i>val</i>)</code></li>
+
+<li><i>FlowLabel</i> 使用 <code>WINDIVERT_IPV6HDR_GET_FLOWLABEL(<i>hdr</i>)</code> 和
+    <code>WINDIVERT_IPV6HDR_SET_FLOWLABEL(<i>hdr</i>, <i>val</i>)</code></li>
+
+</ul>
+
+</dl></dd>
+
+
+<a name="divert_icmphdr"><h3>6.3 WINDIVERT_ICMPHDR</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef struct
+{
+    UINT8  Type;
+    UINT8  Code;
+    UINT16 Checksum;
+    UINT32 Body; // 不同类型/代码有不同含义
+} <b>WINDIVERT_ICMPHDR</b>, *<b>PWINDIVERT_ICMPHDR</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p>
+<b>字段</b><br>
+更多信息请参见 <a href="http://en.wikipedia.org/wiki/Internet_Control_Message_Protocol#ICMP_segment_structure">此处</a>。
+</p><p>
+<b>备注</b><br>
+ICMP 头部定义。
+</p>
+
+</dl></dd>
+
+
+<a name="divert_icmpv6hdr"><h3>6.4 WINDIVERT_ICMPV6HDR</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef struct
+{
+    UINT8  Type;
+    UINT8  Code;
+    UINT16 Checksum;
+    UINT32 Body; // 不同类型/代码有不同含义
+} <b>WINDIVERT_ICMPV6HDR</b>, *<b>PWINDIVERT_ICMPV6HDR</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p>
+<b>字段</b><br>
+更多信息请参见 <a href="http://en.wikipedia.org/wiki/ICMPv6#Packet_format">此处</a>。
+</p><p>
+<b>备注</b><br>
+ICMPv6 头部定义。
+</p>
+
+</dl></dd>
+
+
+<a name="divert_tcphdr"><h3>6.5 WINDIVERT_TCPHDR</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef struct
+{
+    UINT16 SrcPort;
+    UINT16 DstPort;
+    UINT32 SeqNum;
+    UINT32 AckNum;
+    UINT16 Reserved1:4;
+    UINT16 HdrLength:4;
+    UINT16 Fin:1;
+    UINT16 Syn:1;
+    UINT16 Rst:1;
+    UINT16 Psh:1;
+    UINT16 Ack:1;
+    UINT16 Urg:1;
+    UINT16 Reserved2:2; // ECE, CWR (原文为 Reserved2，但通常是 ECE, CWR)
+    UINT16 Window;
+    UINT16 Checksum;
+    UINT16 UrgPtr;
+} <b>WINDIVERT_TCPHDR</b>, *<b>PWINDIVERT_TCPHDR</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p>
+<b>字段</b><br>
+更多信息请参见 <a href="http://en.wikipedia.org/wiki/Transmission_Control_Protocol#TCP_segment_structure">此处</a>。
+</p><p>
+<b>备注</b><br>
+TCP 头部定义。
+</p>
+
+</dl></dd>
+
+
+<a name="divert_udphdr"><h3>6.6 WINDIVERT_UDPHDR</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+typedef struct
+{
+    UINT16 SrcPort;
+    UINT16 DstPort;
+    UINT16 Length;
+    UINT16 Checksum;
+} <b>WINDIVERT_UDPHDR</b>, *<b>PWINDIVERT_UDPHDR</b>;
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p>
+<b>字段</b><br>
+更多信息请参见 <a href="http://en.wikipedia.org/wiki/User_Datagram_Protocol#Packet_structure">此处</a>。
+</p><p>
+<b>备注</b><br>
+UDP 头部定义。
+</p>
+
+</dl></dd>
+
+
+<a name="divert_helper_parse_packet"><h3>6.7 WinDivertHelperParsePacket</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperParsePacket</b>(
+    __in PVOID pPacket,
+    __in UINT packetLen,
+    __out_opt PWINDIVERT_IPHDR *ppIpHdr,
+    __out_opt PWINDIVERT_IPV6HDR *ppIpv6Hdr,
+    __out_opt UINT8 *pProtocol,
+    __out_opt PWINDIVERT_ICMPHDR *ppIcmpHdr,
+    __out_opt PWINDIVERT_ICMPV6HDR *ppIcmpv6Hdr,
+    __out_opt PWINDIVERT_TCPHDR *ppTcpHdr,
+    __out_opt PWINDIVERT_UDPHDR *ppUdpHdr,
+    __out_opt PVOID *ppData,
+    __out_opt UINT *pDataLen,
+    __out_opt PVOID *ppNext,
+    __out_opt UINT *pNextLen
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>pPacket</code>: 要解析的数据包。</li>
+
+<li> <code>packetLen</code>: 数据包 <code>pPacket</code> 的总长度。</li>
+
+<li> <code>ppIpHdr</code>: 指向 <code>WINDIVERT_IPHDR</code> 的输出指针。</li>
+
+<li> <code>ppIpv6Hdr</code>: 指向 <code>WINDIVERT_IPV6HDR</code> 的输出指针。</li>
+
+<li> <code>pProtocol</code>: 输出传输协议。</li>
+
+<li> <code>ppIcmpHdr</code>: 指向 <code>WINDIVERT_ICMPHDR</code> 的输出指针。</li>
+
+<li> <code>ppIcmpv6Hdr</code>: 指向 <code>WINDIVERT_ICMPV6HDR</code> 的输出指针。</li>
+
+<li> <code>ppTcpHdr</code>: 指向 <code>WINDIVERT_TCPHDR</code> 的输出指针。</li>
+
+<li> <code>ppUdpHdr</code>: 指向 <code>WINDIVERT_UDPHDR</code> 的输出指针。</li>
+
+<li> <code>ppData</code>: 指向数据包数据/有效载荷的输出指针。</li>
+
+<li> <code>pDataLen</code>: 输出数据/有效载荷长度。</li>
+
+<li> <code>ppNext</code>: 指向下一个数据包（如果存在）的输出指针。</li>
+
+<li> <code>pNextLen</code>: 输出下一个数据包的长度。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+</p><p>
+<b>备注</b><br>
+将原始数据包或一批数据包（例如来自 <a
+href="#divert_recv"><code>WinDivertRecv()</code></a>）解析为
+可能存在或不存在的各种数据包头部和/或有效载荷。
+</p><p>
+每个输出参数都可以是 <code>NULL</code> 或非 <code>NULL</code>。
+对于非 <code>NULL</code> 参数，如果相应的头部/有效载荷存在，此函数将写入指向它的指针，
+否则将写入 <code>NULL</code>。
+任何返回的非 <code>NULL</code> 指针：
+</p>
+
+<ol>
+
+<li> 是指向原始 <code>pPacket</code> 数据包缓冲区的指针；并且</li>
+
+<li> <code>pPacket</code> 中有足够的空间容纳该头部。</li>
+
+</ol>
+
+<p>
+此函数除了检查头部长度和解析所需的任何其他最少信息外，
+不进行任何头部/有效载荷内容的验证。
+只要 <code>pPacket</code> 缓冲区至少包含一个 IPv4 或 IPv6 头部并且 <code>packetLen</code> 正确，
+此函数将始终成功。
+</p><p>
+默认情况下，此函数将解析单个数据包。
+但是，如果 <code>ppNext</code> 或 <code>pNextLen</code> 非 <code>NULL</code>，
+则 <code>pPacket</code> 参数可以指向一批（>1）数据包
+（并且 <code>packetLen</code> 可以是该批次的总长度）。
+在这种情况下，函数将解析第一个数据包，并将指向
+剩余数据包的指针写入 <code>ppNext</code>，
+并将剩余长度写入 <code>pNextLen</code>。
+这使得可以方便地遍历批次中的每个数据包，如下所示：
+</p>
+
+<pre>
+    while (WinDivertHelperParsePacket(pPacket, packetLen, ..., &amp;pPacket, &amp;packetLen))
+    {
+        ...
+    }
+</pre>
+
+</dd></dl>
+
+
+<a name="divert_helper_hash_packet"><h3>6.8 WinDivertHelperHashPacket</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+UINT64 <b>WinDivertHelperHashPacket</b>(
+    __in const VOID *pPacket,
+    __in UINT packetLen,
+    __in UINT64 seed = 0
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>pPacket</code>: 要进行哈希计算的数据包。</li>
+
+<li> <code>packetLen</code>: 数据包 <code>pPacket</code> 的总长度。</li>
+
+<li> <code>seed</code>: 可选的种子值。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+一个 64 位哈希值。
+</p><p>
+<b>备注</b><br>
+计算给定数据包的 64 位哈希值。
+请注意，哈希函数<i>仅依赖于数据包的
+IP 和传输头部</i>，而不依赖于数据包的有效载荷。
+也就是说，如果 TCP/UDP 校验和有效，则对有效载荷会存在弱依赖性。
+哈希函数本身基于
+<a href="https://cyan4973.github.io/xxHash/">xxHash</a> 算法，
+并且<b>不是</b>加密安全的。
+</p><p>
+可选的 <code>seed</code> 值也会被合并到哈希中。
+<p>
+
+</dd></dl>
+
+
+<a name="divert_helper_parse_ipv4_address"><h3>6.9 WinDivertHelperParseIPv4Address</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperParseIPv4Address</b>(
+    __in const char *addrStr,
+    __out_opt UINT32 *pAddr
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>addrStr</code>: 地址字符串。</li>
+
+<li> <code>pAddr</code>: 输出地址。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+解析存储在 <code>addrStr</code> 中的 IPv4 地址。
+如果 <code>pAddr</code> 非 <code>NULL</code>，结果将以主机字节序存储。
+使用 <a href="#divert_helper_hton"><code>WinDivertHelperHtonl()</code></a>
+将结果转换为网络字节序。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_parse_ipv6_address"><h3>6.10 WinDivertHelperParseIPv6Address</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperParseIPv6Address</b>(
+    __in const char *addrStr,
+    __out_opt UINT32 *pAddr // 应为 UINT32 pAddr[4] 或类似结构
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>addrStr</code>: 地址字符串。</li>
+
+<li> <code>pAddr</code>: 输出地址。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+解析存储在 <code>addrStr</code> 中的 IPv6 地址。
+如果 <code>pAddr</code> 非 <code>NULL</code>，则假定缓冲区
+足够大以容纳 16 字节的 IPv6 地址。
+结果以主机字节序存储。
+使用 <a href="#divert_helper_hton"><code>WinDivertHelperHtonIPv6Address()</code></a>
+将结果转换为网络字节序。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_format_ipv4_address"><h3>6.11 WinDivertHelperFormatIPv4Address</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperFormatIPv4Address</b>(
+    __in UINT32 addr,
+    __out char *buffer,
+    __in UINT bufLen
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>addr</code>: 主机字节序的 IPv4 地址。</li>
+
+<li> <code>buffer</code>: 用于存储格式化字符串的缓冲区。</li>
+
+<li> <code>bufLen</code>: <code>buffer</code> 的长度。
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+将 IPv4 地址转换为字符串。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_format_ipv6_address"><h3>6.12 WinDivertHelperFormatIPv6Address</h3></a>  <!-- 原文档标题为 WinDivertHelperParseIPv6Address，应为 Format -->
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperFormatIPv6Address</b>(
+    __in const UINT32 *pAddr, // 应为 const UINT32 pAddr[4] 或类似结构
+    __out char *buffer,
+    __in UINT bufLen
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>pAddr</code>: 主机字节序的 IPv6 地址。</li>
+
+<li> <code>buffer</code>: 用于存储格式化字符串的缓冲区。</li>
+
+<li> <code>bufLen</code>: <code>buffer</code> 的长度。
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+将 IPv6 地址转换为字符串。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_calc_checksums"><h3>6.13 WinDivertHelperCalcChecksums</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperCalcChecksums</b>(
+    __inout VOID *pPacket,
+    __in UINT packetLen,
+    __out_opt WINDIVERT_ADDRESS *pAddr,
+    __in UINT64 flags
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>pPacket</code>: 要修改的数据包。</li>
+
+<li> <code>packetLen</code>: 数据包 <code>pPacket</code> 的总长度。</li>
+
+<li> <code>pAddr</code>: 指向
+    <a href="#divert_address"><code>WINDIVERT_ADDRESS</code></a> 结构的可选指针。</li>
+
+<li> <code>flags</code>: 以下一个或多个标志：
+<ul>
+
+<li> <code>WINDIVERT_HELPER_NO_IP_CHECKSUM</code>: 不计算 IPv4
+    校验和。</li>
+
+<li> <code>WINDIVERT_HELPER_NO_ICMP_CHECKSUM</code>: 不计算 ICMP
+    校验和。</li>
+
+<li> <code>WINDIVERT_HELPER_NO_ICMPV6_CHECKSUM</code>: 不计算 ICMPv6
+    校验和。</li>
+
+<li> <code>WINDIVERT_HELPER_NO_TCP_CHECKSUM</code>: 不计算 TCP
+    校验和。</li>
+
+<li> <code>WINDIVERT_HELPER_NO_UDP_CHECKSUM</code>: 不计算 UDP
+    校验和。</li>
+
+</ul></li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+</p><p>
+<b>备注</b><br>
+（重新）计算给定数据包中存在的任何 IPv4/ICMP/ICMPv6/TCP/UDP 校验和。
+可以通过适当的标志禁用单个校验和计算。
+通常，此函数应在修改后的数据包通过 <a href="#divert_send"><code>WinDivertSend()</code></a> 注入之前调用。
+</p><p>
+默认情况下，此函数将从头开始计算每个校验和，即使现有校验和是正确的。
+对于某些应用程序，这可能效率低下。
+为了获得更好的性能，应改用增量校验和计算
+（此 API 未提供）。
+</p><p>
+如果 <code>pAddr</code> 非 <code>NULL</code>，此函数将设置相应的
+<code>*Checksum</code> 标志
+（参见 <a href="#divert_address"><code>WINDIVERT_ADDRESS</code></a>）。
+通常，<code>pAddr</code> 应指向传递给 <a href="#divert_send"><code>WinDivertSend()</code></a>
+用于数据包注入的地址。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_dec_ttl"><h3>6.14 WinDivertHelperDecrementTTL</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperDecrementTTL</b>(
+    __inout VOID *packet,
+    __in UINT packetLen // 原文缺少 UINT
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>pPacket</code>: 要修改的数据包。</li>
+
+<li> <code>packetLen</code>: 数据包 <code>pPacket</code> 的总长度。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+如果 <code>ip.TTL</code> 或
+<code>ipv6.HopLimit</code> 字段变为 <code>0</code>，则返回 <code>FALSE</code>。
+</p><p>
+<b>备注</b><br>
+将 <code>ip.TTL</code> 或
+<code>ipv6.HopLimit</code> 字段减 <code>1</code>，并且仅当结果非零时返回
+<code>TRUE</code>。
+这对于可能存在数据包循环问题的应用程序很有用。
+</p><p>
+对于 IPv4，此函数将保留 IPv4 校验和的有效性。
+也就是说，如果数据包在操作前具有有效的校验和，则
+操作后的结果校验和也将有效。
+此函数以增量方式更新校验和字段。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_compile_filter"><h3>6.15 WinDivertHelperCompileFilter</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperCompileFilter</b>(
+    __in const char *filter,
+    __in WINDIVERT_LAYER layer,
+    __out_opt char *object,
+    __in UINT objLen,
+    __out_opt const char **errorStr,
+    __out_opt UINT *errorPos
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>filter</code>: 要检查的数据包过滤器字符串。</li>
+
+<li> <code>layer</code>: 层。</li>
+
+<li> <code>object</code>: 编译后的过滤器对象。</li>
+
+<li> <code>objLen</code>: <code>object</code> 缓冲区的长度。</li>
+
+<li> <code>errorStr</code>: 错误描述。</li>
+
+<li> <code>errorPos</code>: 错误位置。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果数据包过滤器编译成功，则返回 <code>TRUE</code>，否则返回 <code>FALSE</code>。
+</p><p>
+<b>备注</b><br>
+将给定的数据包过滤器字符串编译成紧凑的“对象”
+表示形式，如果非 NULL，则可选地存储在 <code>object</code> 中。
+“对象”表示形式是一个有效的以 null 结尾的 C 字符串，但其他方面是不透明的，
+不适合人类阅读。
+对象表示形式可以传递给所有 WinDivert 函数，
+例如 <a href="#divert_open"><code>WinDivertOpen()</code></a>，以代替
+等效的人类可读的过滤器字符串。
+</p>
+
+<p>
+如果给定的过滤器字符串对于
+<a href="#filter_language">过滤器语言</a>是有效的，则编译操作将成功。
+否则，如果过滤器无效，则错误的
+人类可读描述将由 <code>errorStr</code> 返回（如果非 <code>NULL</code>），
+并且错误的位置将由 <code>errorPos</code> 返回（如果非 <code>NULL</code>）。
+</p><p>
+请注意，通过 <code>errorStr</code> 返回的所有字符串都是全局静态对象，
+因此不需要释放。
+<p>
+
+</dd></dl>
+
+
+<a name="divert_helper_eval_filter"><h3>6.16 WinDivertHelperEvalFilter</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperEvalFilter</b>(
+    __in const char *filter,
+    __in const VOID *pPacket,
+    __in UINT packetLen,
+    __in const WINDIVERT_ADDRESS *pAddr
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>filter</code>: 要评估的数据包过滤器字符串。</li>
+
+<li> <code>pPacket</code>: 数据包。</li>
+
+<li> <code>packetLen</code>: 数据包 <code>pPacket</code> 的总长度。</li>
+
+<li> <code>pAddr</code>: 数据包 <code>pPacket</code> 的 <code>WINDIVERT_ADDRESS</code>。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果数据包与过滤器字符串匹配，则返回 <code>TRUE</code>，
+    否则返回 <code>FALSE</code>。
+</p><p>
+<b>备注</b><br>
+根据给定的数据包过滤器字符串评估给定的数据包。
+如果数据包匹配，则此函数返回 <code>TRUE</code>，否则返回 <code>FALSE</code>。
+</p><p>
+如果发生错误，此函数也返回 <code>FALSE</code>，在这种情况下，
+可以使用 <code>GetLastError()</code> 获取错误原因。
+否则，如果没有发生错误，<code>GetLastError()</code> 将返回
+<code>0</code>。
+</p><p>
+请注意，此函数相对较慢，因为每次调用都会（重新）编译数据包过滤器字符串。
+可以通过使用
+<a href="#divert_helper_compile_filter"><code>WinDivertHelperCompileFilter()</code></a>
+函数将过滤器字符串预编译为对象表示形式来最小化此开销。
+<p>
+
+</dd></dl>
+
+
+<a name="divert_helper_format_filter"><h3>6.17 WinDivertHelperFormatFilter</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+BOOL <b>WinDivertHelperFormatFilter</b>( // 原文函数名为 WinDivertHelperEvalFilter，应为 Format
+    __in const char *filter,
+    __in WINDIVERT_LAYER layer,
+    __out char *buffer,
+    __in UINT bufLen
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>filter</code>: 要格式化的数据包过滤器字符串或对象。</li> <!-- 原文为 "to be evaluated" -->
+
+<li> <code>layer</code>: 层。</li>
+
+<li> <code>buffer</code>: 用于存储格式化过滤器的缓冲区。</li>
+
+<li> <code>bufLen</code>: <code>buffer</code> 的长度。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+如果成功则返回 <code>TRUE</code>，如果发生错误则返回 <code>FALSE</code>。
+使用 <code>GetLastError()</code> 获取错误原因。
+</p><p>
+<b>备注</b><br>
+格式化给定的过滤器字符串或对象。
+此函数主要用于将过滤器对象表示形式“反编译”回
+人类可读的过滤器字符串表示形式。
+一个应用是 <code>WINDIVERT_LAYER_REFLECT</code> 层，
+其中与反射事件关联的过滤器对象由
+<a href="#divert_recv"><code>WinDivertRecv()</code></a> 返回。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_ntoh"><h3>6.18 WinDivertHelperNtoh*</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+UINT16 <b>WinDivertHelperNtohs</b>(
+    __in UINT16 x
+);
+UINT32 <b>WinDivertHelperNtohl</b>(
+    __in UINT32 x
+);
+UINT64 <b>WinDivertHelperNtohll</b>(
+    __in UINT64 x
+);
+void <b>WinDivertHelperNtohIPv6Address</b>(
+    __in const UINT32 *inAddr, // 原文为 UINT*
+    __out UINT32 *outAddr // 原文为 UINT*
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>x</code>: 网络字节序的输入值。</li>
+
+<li> <code>inAddr</code>: 网络字节序的输入 IPv6 地址。</li>
+
+<li> <code>outAddr</code>: 用于存储主机字节序的输出 IPv6 地址的缓冲区。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+主机字节序的输出值。
+</p><p>
+<b>备注</b><br>
+将值/IPv6 地址从网络字节序转换为主机字节序。
+</p>
+
+</dd></dl>
+
+
+<a name="divert_helper_hton"><h3>6.19 WinDivertHelperHton*</h3></a>
+
+<table border="1" cellpadding="5"><tr><td>
+
+<pre>
+UINT16 <b>WinDivertHelperHtons</b>(
+    __in UINT16 x
+);
+UINT32 <b>WinDivertHelperHtonl</b>(
+    __in UINT32 x
+);
+UINT64 <b>WinDivertHelperHtonll</b>(
+    __in UINT64 x
+);
+void <b>WinDivertHelperHtonIPv6Address</b>(
+    __in const UINT32 *inAddr, // 原文为 UINT*
+    __out UINT32 *outAddr // 原文为 UINT*
+);
+</pre>
+
+</td></tr></table>
+
+<dl><dd>
+
+<p><b>参数</b></p>
+
+<ul>
+
+<li> <code>x</code>: 主机字节序的输入值。</li>
+
+<li> <code>inAddr</code>: 主机字节序的输入 IPv6 地址。</li>
+
+<li> <code>outAddr</code>: 用于存储网络字节序的输出 IPv6 地址的缓冲区。</li>
+
+</ul>
+
+<p>
+<b>返回值</b><br>
+网络字节序的输出值。
+</p><p>
+<b>备注</b><br>
+将值/IPv6 地址从主机字节序转换为网络字节序。
+</p>
+
+</dd></dl>
+
+
+<hr>
+
+<a name="filter_language"><h2>7. 过滤器语言</h2></a>
+
+
+<p>
+<a href="#divert_open"><code>WinDivertOpen()</code></a> 函数接受一个包含<i>过滤器</i>的字符串。
+只有与过滤器匹配的数据包/事件才会被阻止和/或捕获。
+所有其他不匹配的数据包/事件将照常继续。
+</p><p>
+过滤器允许应用程序仅选择感兴趣的流量子集。
+例如，HTTP 黑名单过滤器仅对可能包含 URL 的数据包感兴趣。
+这可以通过以下过滤器实现。
+</p>
+
+<pre>
+HANDLE handle = WinDivertOpen(
+    "outbound and "
+    "tcp.PayloadLength &gt; 0 and "
+    "tcp.DstPort == 80", 0, 0, 0);
+</pre>
+
+<p>
+此过滤器仅选择满足以下条件的所有流量子集：
+</p>
+
+<ol>
+
+<li>出站；</li>
+
+<li>包含非空有效载荷；并且</li>
+
+<li>TCP 目标端口为 80（即 HTTP Web 流量）。
+</ol>
+
+<p>
+<i>过滤器</i>是一个布尔表达式，形式如下：
+</p>
+
+<pre>
+        <i>FILTER</i> := true | false | <i>FILTER</i> and <i>FILTER</i> | <i>FILTER</i> or <i>FILTER</i> | (<i>FILTER</i>) | (<i>FILTER</i>? <i>FILTER</i>: <i>FILTER</i>) | <i>TEST</i>
+</pre>
+
+<p>
+C 风格语法 <code>&amp;&amp;</code>、<code>||</code> 和 <code>!</code> 也可以分别代替 <code>and</code>、<code>or</code> 和 <code>not</code> 使用。
+还支持 C 风格的<i>条件运算符</i>，
+其中表达式 <code>(A? B: C)</code> 的计算结果为：
+</p>
+
+<ul>
+
+<li> 如果 <code>A</code> 计算结果为 <code>true</code>，则为 <code>B</code>；或</li>
+
+<li> 如果 <code>A</code> 计算结果为 <code>false</code>，则为 <code>C</code>。
+
+</ul>
+
+<p>
+<i>测试</i>的形式如下：
+</p>
+
+<pre>
+        <i>TEST</i> := <i>TEST0</i> | not <i>TEST0</i>
+        <i>TEST0</i> := <i>FIELD</i> | <i>FIELD</i> op <i>VAL</i>
+</pre>
+
+<p>
+其中 <code>op</code> 是以下之一：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5">
+
+<tr><th>运算符</th><th>描述</th></tr>
+
+<tr><td><code>==</code> 或 <code>=</code></td><td>等于</td></tr>
+
+<tr><td><code>!=</code></td><td>不等于</td></tr>
+
+<tr><td><code>&lt;</code></td><td>小于</td></tr>
+
+<tr><td><code>&gt;</code></td><td>大于</td></tr>
+
+<tr><td><code>&lt;=</code></td><td>小于或等于</td></tr>
+
+<tr><td><code>&gt;=</code></td><td>大于或等于</td></tr>
+
+</table>
+
+</center>
+
+<p>
+并且 <code><i>VAL</i></code> 是一个十进制数、十六进制数、IPv4
+地址、IPv6 地址或特定于层的宏。
+如果缺少 “<code>op <i>VAL</i></code>”，则测试隐式为
+“<code><i>FIELD</i> != 0</code>”。
+</p><p>
+最后，<i>字段</i>是与数据包或事件匹配的某些特定于层的属性。
+可能的字段有：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5">
+
+<tr><th>字段</th><th colspan="5">层</th><th>描述</th></tr>
+
+<tr><th></th><th><code>NETWORK</code></th><th><code>FORWARD</code></th><th><code>FLOW&nbsp;&nbsp;&nbsp;</code></th><th><code>SOCKET&nbsp;</code></th><th><code>REFLECT</code></th><th></th></tr>
+
+<tr><td><code>zero</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>值零</td></tr>
+
+<tr><td><code>timestamp</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>数据包/事件时间戳</td></tr>
+
+<tr><td><code>event</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>事件</td></tr>
+
+<tr><td><code>outbound</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td></td><td></td><td>是否出站？</td></tr>
+
+<tr><td><code>inbound</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td></td><td></td><td>是否入站？</td></tr>
+
+<tr><td><code>ifIdx</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>接口索引</td></tr>
+
+<tr><td><code>subIfIdx</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>子接口索引</td></tr>
+
+<tr><td><code>loopback</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>是否环回数据包？</td></tr>
+
+<tr><td><code>impostor</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>是否伪装数据包？</td></tr>
+
+<tr><td><code>fragment</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>是否 IP 分片数据包？</td></tr>
+
+<tr><td><code>endpointId</code></td><td></td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>端点 ID</td></tr>
+
+<tr><td><code>parentEndpointId</code></td><td></td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>父端点 ID</td></tr>
+
+<tr><td><code>processId</code></td><td></td><td></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>进程 ID</td></tr>
+
+<tr><td><code>random8</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>8 位随机数</td></tr>
+
+<tr><td><code>random16</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>16 位随机数</td></tr>
+
+<tr><td><code>random32</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>32 位随机数</td></tr>
+
+<tr><td><code>layer</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td>句柄的层</td></tr>
+
+<tr><td><code>priority</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td>句柄的优先级</td></tr>
+
+<tr><td><code>packet[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>数据包的第 <code>i</code> 个 8 位字</td></tr>
+
+<tr><td><code>packet16[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>数据包的第 <code>i</code> 个 16 位字</td></tr>
+
+<tr><td><code>packet32[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>数据包的第 <code>i</code> 个 32 位字</td></tr>
+
+<tr><td><code>length</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>数据包长度</td></tr>
+
+<tr><td><code>ip</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td><td>是否 IPv4？</td></tr>
+
+<tr><td><code>ipv6</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td><td>是否 IPv6？</td></tr>
+
+<tr><td><code>icmp</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td><td>是否 ICMP？</td></tr>
+
+<tr><td><code>icmpv6</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td><td>是否 ICMPv6？</td></tr>
+
+<tr><td><code>tcp</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td><td>是否 TCP？</td></tr>
+
+<tr><td><code>udp</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td></td><td>是否 UDP？</td></tr>
+
+<tr><td><code>protocol</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>协议</td></tr>
+
+<tr><td><code>localAddr</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>本地地址</td></tr>
+
+<tr><td><code>localPort</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>本地端口</td></tr>
+
+<tr><td><code>remoteAddr</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>远程地址</td></tr>
+
+<tr><td><code>remotePort</code></td><td>&#10004;</td><td></td><td>&#10004;</td><td>&#10004;</td><td></td><td>远程端口</td></tr>
+
+<tr><td><code>ip.*</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>IPv4 字段 (参见 <code>WINDIVERT_IPHDR</code>)</td></tr>
+
+<tr><td><code>ipv6.*</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>IPv6 字段 (参见 <code>WINDIVERT_IPV6HDR</code>)</td></tr>
+
+<tr><td><code>icmp.*</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>ICMP 字段 (参见 <code>WINDIVERT_ICMPHDR</code>)</td></tr>
+
+<tr><td><code>icmpv6.*</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>ICMPV6 字段 (参见 <code>WINDIVERT_ICMPV6HDR</code>)</td></tr>
+
+<tr><td><code>tcp.*</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>TCP 字段 (参见 <code>WINDIVERT_TCPHDR</code>)</td></tr>
+
+<tr><td><code>tcp.PayloadLength</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>TCP 有效载荷长度</td></tr>
+
+<tr><td><code>tcp.Payload[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>TCP 有效载荷的第 <code>i</code> 个 8 位字</td></tr>
+
+<tr><td><code>tcp.Payload16[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>TCP 有效载荷的第 <code>i</code> 个 16 位字</td></tr>
+
+<tr><td><code>tcp.Payload32[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>TCP 有效载荷的第 <code>i</code> 个 32 位字</td></tr>
+
+<tr><td><code>udp.*</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>UDP 字段 (参见 <code>WINDIVERT_UDPHDR</code>)</td></tr>
+
+<tr><td><code>udp.PayloadLength</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>UDP 有效载荷长度</td></tr>
+
+<tr><td><code>udp.Payload[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>UDP 有效载荷的第 <code>i</code> 个 8 位字</td></tr>
+
+<tr><td><code>udp.Payload16[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>UDP 有效载荷的第 <code>i</code> 个 16 位字</td></tr>
+
+<tr><td><code>udp.Payload32[i]</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td>UDP 有效载荷的第 <code>i</code> 个 32 位字</td></tr>
+
+</table>
+
+</center>
+
+<p>
+如果字段不相关，<i>测试</i>也将失败。
+例如，如果数据包不包含 TCP 头部，则测试“<code>tcp.DstPort == 80</code>”将失败。
+</p><p>
+<code>processId</code> 字段匹配与事件关联的进程 ID。
+由于技术限制，<code>WINDIVERT_LAYER_NETWORK*</code> 层不支持此字段。
+也就是说，通常可以将进程 ID 与匹配相同网络五元组的网络数据包关联起来。
+请注意，<code>processId</code> 与相应进程的终止之间存在根本性的竞争条件，
+请参见下面列出的<a href="#known_issues">已知问题</a>。
+</p><p>
+<code>packet*[i]</code>、<code>tcp.Payload*[i]</code> 和
+<code>udp.Payload*[i]</code> 字段采用<i>索引</i>参数 (<code>i</code>)。
+支持以下索引方案：
+</p>
+
+<ul>
+
+<li> <i>未修饰整数</i> (例如, <code>packet32[10]</code>):
+    计算为从数据包/有效载荷开始的第 <code>i</code> 个字。
+    这本质上是 C 风格的数组索引；</li>
+
+<li> <i>负修饰整数</i> (例如, <code>packet32[-10]</code>):
+    计算为从数据包/有效载荷<b>末尾</b>开始的第 <code>i</code> 个字。
+    此处的索引 (<code>-1</code>) 是适合的第一个完整字；以及</li>
+
+<li> <i>字节修饰（负）整数</i> (例如, <code>packet32[10b]</code>
+    或 <code>packet32[-10b]</code>):
+    计算为从数据包/有效载荷的开始（或结束）偏移 <code>i</code> 字节的字。
+</ul>
+
+<p>
+这些字段可用于根据数据包/有效载荷的内容以及地址/头部信息匹配过滤器。
+字假定为网络字节序。
+如果索引越界，则相应的<i>测试</i>
+被视为失败。
+</p><p>
+<code>random*</code> 字段并非真正随机，而是使用通过
+<a href="#divert_helper_hash_packet"><code>WinDivertHelperHashPacket()</code></a>
+函数计算的确定性哈希值。
+</p><p>
+特定于层的宏使得可以象征性地匹配事件和层，
+例如，“<code>event == CONNECT</code>”或
+“<code>layer == SOCKET</code>”。
+可能的宏有：
+</p>
+
+<center>
+
+<table border="1" cellpadding="5" width="75%">
+
+<tr><th>宏</th><th colspan="5">层</th><th>值</th></tr>
+
+<tr><th></th><th><code>NETWORK</code></th><th><code>FORWARD</code></th><th><code>FLOW&nbsp;&nbsp;&nbsp;</code></th><th><code>SOCKET&nbsp;</code></th><th><code>REFLECT</code></th><th></th></tr>
+
+<tr><td><code>TRUE</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td><code>1</code></td></tr>
+
+<tr><td><code>FALSE</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td><code>0</code></td></tr>
+
+<tr><td><code>TCP</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td><code>IPPROTO_TCP</code> (<code>6</code>)</td></tr>
+
+<tr><td><code>UDP</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td><code>IPPROTO_UDP</code> (<code>17</code>)</td></tr>
+
+<tr><td><code>ICMP</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td><code>IPPROTO_ICMP</code> (<code>1</code>)</td></tr>
+
+<tr><td><code>ICMPV6</code></td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td>&#10004;</td><td><code>IPPROTO_ICMPV6</code> (<code>58</code>)</td></tr>
+
+<tr><td><code>PACKET</code></td><td>&#10004;</td><td>&#10004;</td><td></td><td></td><td></td><td><code>WINDIVERT_EVENT_NETWORK_PACKET</code></td></tr>
+
+<tr><td><code>ESTABLISHED</code></td><td></td><td></td><td>&#10004;</td><td></td><td></td><td><code>WINDIVERT_EVENT_FLOW_ESTABLISHED</code></td></tr>
+
+<tr><td><code>DELETED</code></td><td></td><td></td><td>&#10004;</td><td></td><td></td><td><code>WINDIVERT_EVENT_FLOW_DELETED</code></td></tr>
+
+<tr><td><code>BIND</code></td><td></td><td></td><td></td><td>&#10004;</td><td></td><td><code>WINDIVERT_EVENT_SOCKET_BIND</code></td></tr>
+
+<tr><td><code>CONNECT</code></td><td></td><td></td><td></td><td>&#10004;</td><td></td><td><code>WINDIVERT_EVENT_SOCKET_CONNECT</code></td></tr>
+
+<tr><td><code>ACCEPT</code></td><td></td><td></td><td></td><td>&#10004;</td><td></td><td><code>WINDIVERT_EVENT_SOCKET_ACCEPT</code></td></tr>
+
+<tr><td><code>LISTEN</code></td><td></td><td></td><td></td><td>&#10004;</td><td></td><td><code>WINDIVERT_EVENT_SOCKET_LISTEN</code></td></tr>
+
+<tr><td><code>OPEN</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td><code>WINDIVERT_EVENT_REFLECT_OPEN</code></td></tr>
+
+<tr><td><code>CLOSE</code></td><td></td><td></td><td></td><td>&#10004;</td><td>&#10004;</td><td><code>SOCKET</code> 层的 <code>WINDIVERT_EVENT_SOCKET_CLOSE</code>，或 <code>REFLECT</code> 层的 <code>WINDIVERT_EVENT_REFLECT_CLOSE</code>。</td></tr>
+
+<tr><td><code>NETWORK</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td><code>WINDIVERT_LAYER_NETWORK</code></td></tr>
+
+<tr><td><code>NETWORK_FORWARD</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td><code>WINDIVERT_LAYER_NETWORK_FORWARD</code></td></tr>
+
+<tr><td><code>FLOW</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td><code>WINDIVERT_LAYER_FLOW</code></td></tr>
+
+<tr><td><code>SOCKET</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td><code>WINDIVERT_LAYER_SOCKET</code></td></tr>
+
+<tr><td><code>REFLECT</code></td><td></td><td></td><td></td><td></td><td>&#10004;</td><td><code>WINDIVERT_LAYER_REFLECT</code></td></tr>
+
+</table>
+
+</center>
+
+
+<a name="filter_examples"><h3>7.1 过滤器示例</h3></a>
+
+
+<ol>
+
+<li>
+转向所有出站（非本地）Web 流量：
+<pre>
+HANDLE handle = WinDivertOpen(
+        "outbound and !loopback and "
+        "(tcp.DstPort == 80 or udp.DstPort == 53)",
+        0, 0, 0
+    );
+</pre>
+</li>
+
+<li>
+转向所有入站 TCP SYN：
+<pre>
+HANDLE handle = WinDivertOpen(
+        "inbound and "
+        "tcp.Syn",
+        0, 0, 0
+    );
+</pre>
+</li>
+
+<li>
+转向所有流量：
+<pre>
+HANDLE handle = WinDivertOpen("true", 0, 0, 0);
+</pre>
+</li>
+
+<li>
+不转向任何流量：
+<pre>
+HANDLE handle = WinDivertOpen("false", 0, 0, 0);
+</pre>
+这对于数据包注入很有用。
+</li>
+
+</ol>
+
+
+<a name="filter_usage"><h3>7.2 过滤器用法</h3></a>
+
+
+<p>
+过滤器的目的是帮助应用程序选择其感兴趣的网络流量子集。
+理想情况下，过滤器应该
+</p>
+
+<ol>
+
+<li> 尽可能短；并且</li>
+
+<li> 尽可能具有选择性。</li>
+
+</ol>
+
+<p>
+对于某些应用程序，这两个目标可能会发生冲突。
+也就是说，选择性过滤器不短，而短过滤器不具有选择性。
+对于此类应用程序，开发人员应尝试不同的过滤器配置，
+并仔细测量性能影响以找到最佳解决方案。
+</p>
+
+
+<hr>
+
+<a name="performance"><h2>8. 性能</h2></a>
+
+
+<p>
+使用 WinDivert 将网络流量重定向到用户应用程序会产生性能开销，
+例如复制数据包数据和用户/内核模式上下文切换。
+在重负载（&geq;1Gbps）下，这些开销可能很大。
+可以使用以下技术来减少开销（按重要性顺序排列）：
+</p>
+
+<ol>
+
+<li><i>选择性过滤器</i>：仅选择用户应用程序感兴趣的网络流量子集。
+    不匹配的流量将继续使用默认路径，而不会产生额外开销。</li>
+
+<li><i>批处理模式</i>：
+    <a href="#divert_recv_ex">WinDivertRecvEx()</a> 和
+    <a href="#divert_send_ex">WinDivertSendEx()</a> 函数
+    支持<i>批处理</i>，允许一次接收/发送多个数据包。
+    这可以显著减少与用户/内核模式上下文切换相关的开销。</li>
+
+<li><i>多线程</i>：可以将数据包处理分散到多个线程上，
+    确保用户应用程序不会成为瓶颈。
+    也就是说，有时产生过多的线程会降低性能。
+    </li>
+
+<li><i>小缓冲区</i>：与较大缓冲区相比，大缓冲区通常会产生更多开销。
+    通常，缓冲区大小应尽可能准确地反映预期用途。</li>
+
+<li><i>简单过滤器</i>：
+    目前 WinDivert 不优化过滤器编译，因此
+    由用户应用程序确保过滤器简单/优化。
+    </li>
+
+<li><i>重叠 I/O</i>：这允许用户应用程序在执行接收/发送操作的同时执行其他任务，
+    这可能会提高某些应用程序的性能。
+    单个线程也可以一次启动多个接收/发送操作。
+    但是，使用重叠 I/O 可能很棘手，并且重要的是
+    传递给
+    <a href="#divert_recv_ex">WinDivertRecvEx()</a> 或
+    <a href="#divert_send_ex">WinDivertSendEx()</a> 的所有缓冲区
+    （包括 <code>OVERLAPPED</code> 结构）
+    在操作完成之前不得被用户应用程序修改。</li>
+
+<li><i>队列长度/大小/时间</i>：如果这些值太小，则在重负载下可能会丢弃一些数据包。
+    可以使用
+    <a href="#divert_set_param">WinDivertSetParam()</a> 函数控制这些值。</li>
+
+</ol>
+
+<p>
+<code>passthru.exe</code> <a href="#samples">示例程序</a>可用于试验不同的批处理大小和线程数。
+</p>
+
+
+<hr>
+
+<a name="samples"><h2>9. 示例</h2></a>
+
+
+<p>
+提供了一些示例来演示 WinDivert API。
+示例程序包括：
+</p>
+
+<ul>
+
+<li><code>webfilter.exe</code>：一个简单的 URL 黑名单过滤器。
+    此程序监视出站 HTTP 流量。
+    如果发现与黑名单匹配的 URL 请求，它会劫持
+    TCP 连接，在服务器端重置连接，并向浏览器发送一个简单的阻止页面。
+    黑名单在命令行中指定。</li>
+
+<li><code>netdump.exe</code>：一个基于 WinDivert 过滤器语言的简单数据包嗅探器。
+    此程序接受在命令行中指定的过滤器，并打印有关与过滤器匹配的任何数据包的信息。
+    此示例以“数据包嗅探”模式使用 WinDivert，类似于
+    <code>winpcap</code>。
+    但是，与 <code>winpcap</code> 不同，WinDivert 可以看到本地（环回）数据包。</li>
+
+<li><code>netfilter.exe</code>：一个基于 WinDivert 过滤器语言的简单防火墙。
+    此程序接受在命令行中指定的过滤器，并阻止与过滤器匹配的任何数据包。
+    它通过发送 TCP 重置来阻止 TCP，通过 ICMP 消息来阻止 UDP，并简单地丢弃所有其他流量。
+    这类似于带有 <code>-j REJECT</code> 选项的 Linux <code>iptables</code> 命令。</li>
+
+<li><code>passthru.exe</code>：一个简单的程序，它只是重新注入它捕获的每个数据包。
+    此示例具有可配置的批处理大小和线程数，
+    因此对于性能测试或作为更有趣应用程序的起点很有用。</li>
+
+<li><code>streamdump.exe</code>：一个简单的程序，演示如何使用 WinDivert 处理流。
+    基本思想是将出站 TCP 连接转向到本地代理服务器，该服务器可以捕获或操作流。</li>
+
+<li><code>flowtrack.exe</code>：一个跟踪进出本地计算机的所有网络流的程序，
+    包括诸如负责进程的 ID 之类的信息。
+    <code>flowtrack</code> 示例演示了
+    <code>WINDIVERT_LAYER_FLOW</code> 层。</li>
+
+<li><code>socketdump.exe</code>：转储套接字操作
+    （<code>bind()</code>、<code>connect()</code> 等）以及负责进程的 ID。
+    <code>socketdump</code> 示例演示了
+    <code>WINDIVERT_LAYER_SOCKET</code> 层。</li>
+
+<li><code>windivertctl.exe</code> 允许用户通过 <code>list</code> 或 <code>watch</code>
+    命令查询哪些进程正在使用 WinDivert，或使用 <code>kill</code> 命令终止所有此类进程。
+    <code>windivertctl.exe</code> 还可以使用 <code>uninstall</code> 命令强制删除
+    WinDivert 驱动程序。
+    <code>windivertctl</code> 示例演示了
+    <code>WINDIVERT_LAYER_REFLECT</code> 层。</li>
+
+</ul>
+
+<p>
+这些示例仅用于教育目的，并非功能齐全的应用程序。
+</p><p>
+以下是使用 <code>WINDIVERT_LAYER_NETWORK</code> 层的 WinDivert 应用程序的基本模板。
+基本思想是打开一个 WinDivert 句柄，然后进入一个捕获-修改-重新注入循环：
+</p>
+
+<pre>
+    HANDLE handle;          // WinDivert 句柄
+    WINDIVERT_ADDRESS addr; // 数据包地址
+    char packet[MAXBUF];    // 数据包缓冲区
+    UINT packetLen;
+
+    // 打开某个过滤器
+    handle = WinDivertOpen("...", WINDIVERT_LAYER_NETWORK, 0, 0);
+    if (handle == INVALID_HANDLE_VALUE)
+    {
+        // 处理错误
+        exit(1);
+    }
+
+    // 主捕获-修改-注入循环：
+    while (TRUE)
+    {
+        if (!WinDivertRecv(handle, packet, sizeof(packet), &amp;packetLen, &amp;addr))
+        {
+            // 处理接收错误
+            continue;
+        }
+
+        // 修改数据包。
+
+        WinDivertHelperCalcChecksums(packet, packetLen, &amp;addr, 0);
+        if (!WinDivertSend(handle, packet, packetLen, NULL, &amp;addr))
+        {
+            // 处理发送错误
+            continue;
+        }
+    }
+</pre>
+
+<p>
+对于不需要修改数据包的应用程序，更好的方法是使用 <code>WINDIVERT_FLAG_SNIFF</code> 标志打开 WinDivert 句柄，
+并且不使用 <a href="#divert_send"><code>WinDivertSend()</code></a> 重新注入数据包。
+有关此用法的示例，请参见 <code>netdump.exe</code> 示例程序。
+</p>
+
+
+<hr>
+
+<a name="known_issues"><h2>10. 已知问题</h2></a>
+
+
+<p>
+WinDivert 有一些已知的限制，如下所列：
+</p>
+
+<ul>
+
+<li><i>注入入站 ICMP/ICMPv6 消息</i>：
+    对于某些类型的入站 ICMP/ICMPv6 消息，调用 <a href="#divert_send"><code>WinDivertSend()</code></a> 将失败并返回错误。
+    这可能是因为 Windows TCP/IP 堆栈不处理此类消息。
+    此类错误是无害的，可以忽略。
+    </li>
+
+<li><i>转发层与 Windows NAT 交互不佳</i>：
+    无法使用 WinDivert 在 NAT 之前阻止数据包。
+    作为一般原则，您不应尝试在转发层将 WinDivert 与 Windows NAT 实现混合使用。
+    </li>
+
+<li><i>重新注入未修改的数据包可能导致无限循环</i>：
+    如果两个或多个 Windows 筛选平台 (WFP) 筛选驱动程序（包括 WinDivert 应用程序）
+    阻止并注入未修改的数据包副本，则可能导致无限循环。
+    如果发生此类循环，
+    <a href="#divert_send"><code>WinDivertSend()</code></a> 最终将失败并返回错误 <code>ERROR_HOST_UNREACHABLE</code>。
+    不幸的是，此类错误不容易修复。
+    一些粗略的解决方案包括：(1) 删除不兼容的驱动程序，或
+    (2) 忽略所有 <code>ip.TTL</code> 或
+    <code>ipv6.HopLimit</code> 小于 Windows <code>DefaultTTL</code>
+    注册表值的数据包。
+    有关更多信息，请参见 <a href="https://github.com/basil00/Divert/issues/41">
+    GitHub 问题 #41</a>。
+    </li>
+
+<li><i>WinDivert 可能导致 MSVC x86_64 调试器死锁</i>：
+    死锁的发生是因为调试器使用本地套接字。
+    因此：调试器暂停 WinDivert
+    应用程序，这会阻止数据包处理，从而
+    导致调试器永远等待来自套接字的输入。
+    可以通过忽略环回流量来避免死锁。
+    有关更多信息，请参见 <a href="https://github.com/basil00/Divert/issues/26">
+    GitHub 问题 #26</a>。
+    </li>
+
+<li><i>WinDivert 可能导致数据包乱序</i>：
+    简单地运行 <code>passthru.exe</code> 示例程序就可能导致数据包乱序。
+    这不是一个错误，因为没有要求数据包保持有序。
+    但是，这可能会影响其他有错误的软件
+    （例如一些有错误的 NAT 实现）
+    错误地假设数据包是有序的。
+    </li>
+
+<li><i>“<code>addr.*.processId</code>”与进程终止之间存在竞争条件。</i>
+    当使用 <a href="#divert_recv"><code>WinDivertRecv()</code></a> 接收到事件时，
+    负责该事件的进程可能已经终止。
+    此外，理论上 <code>processId</code> 可能已被重新分配给一个不相关的进程。
+    可以通过将时间戳（<code>addr.Timestamp</code>）与进程的创建时间进行比较来部分缓解此问题。
+    如果进程较新，则 ID 已被重新分配。
+    此竞争条件<b>不</b>影响
+    <code>WINDIVERT_EVENT_REFLECT_OPEN</code> 事件。
+    在这种特殊情况下，<code>addr.Reflect.processId</code>
+    保证在相应的
+    <code>WINDIVERT_EVENT_REFLECT_CLOSE</code> 事件被用户应用程序接收或被丢弃
+    （过滤器不匹配或超时）之前是有效的。
+    </li>
+
+</ul>
+
+
+<hr>
+
+<a name="license"><h2>11. 许可证</h2></a>
+
+<p>
+WinDivert 采用双重许可，您可以选择
+<a href="http://www.gnu.org/licenses/lgpl-3.0.txt">GNU 宽通用公共许可证 (LGPL) 版本 3</a> 或
+<a href="https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt">
+GNU 通用公共许可证 (GPL) 版本 2</a>。
+请参阅以下声明：
+</p>
+
+<p>
+<b>LGPL 版本 3</b>：
+</p>
+
+<pre>
+WinDivert 是自由软件：您可以根据自由软件基金会发布的 GNU 宽通用公共许可证的条款重新分发和/或修改它，
+可以是许可证的第 3 版，或者（由您选择）任何更高版本。
+
+本程序的分发是希望它有用，但不作任何保证；甚至没有对适销性或特定用途适用性的默示保证。
+有关更多详细信息，请参见 GNU 宽通用公共许可证。
+
+您应该已经随本程序收到一份 GNU 宽通用公共许可证的副本。如果没有，请参见 &lt;http://www.gnu.org/licenses/&gt;。
+</pre>
+
+<p>
+<b>GPL 版本 2</b>：
+</p>
+
+<pre>
+WinDivert 是自由软件；您可以根据自由软件基金会发布的 GNU 通用公共许可证的条款重新分发和/或修改它；
+可以是许可证的第 2 版，或者（由您选择）任何更高版本。
+
+本程序的分发是希望它有用，但不作任何保证；甚至没有对适销性或特定用途适用性的默示保证。
+有关更多详细信息，请参见 GNU 通用公共许可证。
+
+您应该已经随本程序收到一份 GNU 通用公共许可证的副本；如果没有，请写信给自由软件基金会公司，
+地址：51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA。
+</pre>
+
+</body>
+
+</html>
