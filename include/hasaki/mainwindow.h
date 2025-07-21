@@ -5,11 +5,14 @@
 #include "hasaki/portprocessmonitor.h"
 #include "hasaki/proxy_server.h"
 #include "hasaki/endpoint_mapper.h"
+#include "hasaki/udp_session_manager.h"
+#include "hasaki/udp_packet_injector.h"
 
 #include <QMainWindow>
 #include <QComboBox>
 #include <QMap>
 #include <QPair>
+#include <QTimer>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -40,6 +43,7 @@ private slots:
     void on_actionUdpTest_triggered();
     void applySettings();
     void updateMappingsView();
+    void updateUdpSessionView(); // 新增：更新UDP会话表格
     void on_startButton_clicked();
     void on_stopButton_clicked();
     void on_socks5ServerComboBox_currentIndexChanged(int index);
@@ -59,9 +63,14 @@ private:
     PacketForwarder* packetForwarder_;
     ProxyServer* proxyServer_;
     EndpointMapper* endpointMapper_;
+    hasaki::UdpSessionManager* udpSessionManager_; // 使用单例，但仍保留指针
+    hasaki::UdpPacketInjector* udpPacketInjector_;
     QComboBox* socks5ServerComboBox_;
     bool is_running_ = false;
     
     // 存储IP地址到网络适配器索引的映射
     QMap<QString, int> adapterIpMap_;
+    
+    // 定时器，用于定期更新UDP会话表格
+    QTimer* udpSessionUpdateTimer_;
 };

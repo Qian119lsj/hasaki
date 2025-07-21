@@ -103,3 +103,4 @@ dkms.conf
 
 # Cache files
 .cache/ 
+doc/

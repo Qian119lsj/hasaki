@@ -8,23 +8,25 @@
 
 class Socks5Client {
 public:
-    Socks5Client();
-    ~Socks5Client();
+    Socks5Client()= delete;
+    ~Socks5Client()= delete;
 
     // 连接到SOCKS5服务器并请求连接到目标地址
-    SOCKET connectTarget(const std::string& socks5_addr, uint16_t socks5_port, const std::string& target_addr, uint16_t target_port);
+    static SOCKET connectTarget(const std::string& socks5_addr, uint16_t socks5_port, const std::string& target_addr, uint16_t target_port);
 
     // 请求UDP关联
-    SOCKET associateUdp(const std::string &socks5_addr, uint16_t socks5_port, const std::string &client_addr, uint16_t client_port, std::string &udp_addr,
+    static SOCKET associateUdp(const std::string &socks5_addr, uint16_t socks5_port, const std::string &client_addr, uint16_t client_port, std::string &udp_addr,
                         uint16_t &udp_port);
-
+    // 构造SOCKS5 UDP请求头
+    static size_t constructSocks5UdpHeader(char* header, const std::string& target_addr, 
+        uint16_t target_port, bool is_ipv6);
 private:
     // SOCKS5握手和认证
-    bool performHandshake(SOCKET sock);
+    static bool performHandshake(SOCKET sock);
 
     // 发送SOCKS5连接请求
-    bool sendConnectRequest(SOCKET sock, const std::string& target_addr, uint16_t target_port);
+    static bool sendConnectRequest(SOCKET sock, const std::string& target_addr, uint16_t target_port);
 
     // 接收SOCKS5连接响应
-    bool receiveConnectResponse(SOCKET sock);
+    static bool receiveConnectResponse(SOCKET sock);
 };

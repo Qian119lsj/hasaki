@@ -44,6 +44,9 @@ void AppSettings::ensureConfigFileExists() const {
         root["Socks5Servers"] = socks5Servers;
         root["CurrentSocks5Server"] = "默认";
         
+        // 默认启用IPv6
+        root["EnableIpv6"] = true;
+        
         writeJsonObject(root);
     }
 }
@@ -273,4 +276,14 @@ QPair<QString, int> AppSettings::getCurrentSocks5ServerInfo() const {
     
     // 如果找不到当前服务器，返回默认值
     return qMakePair(QString("127.0.0.1"), 1087);
+} 
+
+bool AppSettings::isIpv6Enabled() const {
+    return readJsonObject().value("EnableIpv6").toBool(true);
+}
+
+void AppSettings::setIpv6Enabled(bool enabled) {
+    QJsonObject root = readJsonObject();
+    root["EnableIpv6"] = enabled;
+    writeJsonObject(root);
 } 

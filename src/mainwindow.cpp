@@ -17,9 +17,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // 初始化网络适配器IP映射
     initializeAdapterIpMap();
 
-    // 设置表格
-    ui->mappingsTableWidget->setColumnCount(2);
-    ui->mappingsTableWidget->setHorizontalHeaderLabels({"端口", "进程名"});
+    // 设置UDP会话表格
+    ui->mappingsTableWidget->setColumnCount(5);
+    ui->mappingsTableWidget->setHorizontalHeaderLabels({"客户端IP", "客户端端口", "目标IP", "目标端口", "最后活动时间"});
     ui->mappingsTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
     // 初始化组件
@@ -28,12 +28,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     endpointMapper_ = EndpointMapper::getInstance();
     packetForwarder_ = new PacketForwarder();
     proxyServer_ = new ProxyServer(endpointMapper_);
+    // 使用UdpSessionManager单例
+    udpSessionManager_ = hasaki::UdpSessionManager::getInstance();
 
     // 设置组件关系
     packetForwarder_->setPortProcessMonitor(portProcessMonitor_);
-    proxyServer_->setPacketForwarder(packetForwarder_);
+    proxyServer_->setAdapterIpMap(adapterIpMap_);
+    udpPacketInjector_ = new hasaki::UdpPacketInjector();
+    proxyServer_->setUdpPacketInjector(udpPacketInjector_);
 
-    connect(portProcessMonitor_, &PortProcessMonitor::mappingsChanged, this, &MainWindow::updateMappingsView);
+    // 不再使用端口映射更新信号
+    // connect(portProcessMonitor_, &PortProcessMonitor::mappingsChanged, this, &MainWindow::updateMappingsView);
 
     // 设置初始状态
     portProcessMonitor_->setTargetProcessNames(appSettings_->getTargetProcessNames());
@@ -46,8 +51,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     updateSocks5ServerComboBox();
     connect(ui->socks5ServerComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::on_socks5ServerComboBox_currentIndexChanged);
 
+    // 初始化UDP会话更新定时器
+    udpSessionUpdateTimer_ = new QTimer(this);
+    connect(udpSessionUpdateTimer_, &QTimer::timeout, this, &MainWindow::updateUdpSessionView);
+    udpSessionUpdateTimer_->start(2000); // 每2秒更新一次
+
     ui->startButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
+    
+    // 初始更新一次UDP会话表格
+    updateUdpSessionView();
 }
 
 MainWindow::~MainWindow() {
@@ -57,8 +70,13 @@ MainWindow::~MainWindow() {
     // 关闭延迟删除管理器
     DelayedDeleteManager::getInstance()->stop();
     
+    // 停止定时器
+    udpSessionUpdateTimer_->stop();
+    
     delete packetForwarder_;
     delete proxyServer_;
+    // 不需要删除单例对象
+    // delete udpSessionManager_;
     delete ui;
 }
 
@@ -68,6 +86,7 @@ void MainWindow::on_actionSettings_triggered() {
     dialog.setBlacklistEnabled(appSettings_->isBlacklistEnabled());
     dialog.setBlacklistProcessNames(appSettings_->getBlacklistProcessNames());
     dialog.setProxyPort(appSettings_->getProxyServerPort());
+    dialog.setEnableIpv6(appSettings_->isIpv6Enabled());
 
     // 连接应用设置信号
     connect(&dialog, &SettingsDialog::applySettings, this, &MainWindow::applySettings);
@@ -135,11 +154,15 @@ void MainWindow::applySettingsFromDialog(SettingsDialog *dialog) {
     appSettings_->setBlacklistEnabled(dialog->isBlacklistEnabled());
     appSettings_->setBlacklistProcessNames(dialog->getBlacklistProcessNames());
     appSettings_->setProxyServerPort(dialog->getProxyPort());
+    appSettings_->setIpv6Enabled(dialog->isIpv6Enabled());
 
     // 应用到监控器
     portProcessMonitor_->setTargetProcessNames(dialog->getProcessNames());
     portProcessMonitor_->setBlacklistProcessNames(dialog->getBlacklistProcessNames());
     portProcessMonitor_->setBlacklistMode(dialog->isBlacklistEnabled());
+    
+    // 应用IPv6设置到PacketForwarder
+    packetForwarder_->setEnableIpv6(dialog->isIpv6Enabled());
 
     // 如果正在运行，可能需要重启服务以应用新设置
     if (is_running_) {
@@ -157,26 +180,55 @@ void MainWindow::applySettings() {
 }
 
 void MainWindow::updateMappingsView() {
+    // 此方法保留但不再使用，改为使用updateUdpSessionView
+}
+
+void MainWindow::updateUdpSessionView() {
     ui->mappingsTableWidget->setRowCount(0); // 清空表格
-    const auto mappings = portProcessMonitor_->getPortProcessList();
-
+    
+    // 获取UDP会话数据
+    auto sessions = udpSessionManager_->getSessions();
+    
     ui->mappingsTableWidget->setSortingEnabled(false); // 更新时禁用排序
-
-    for (const auto &info : mappings) {
-        int row = ui->mappingsTableWidget->rowCount();
+    
+    int row = 0;
+    for (const auto &session_pair : sessions) {
+        auto &session = session_pair.second;
+        
         ui->mappingsTableWidget->insertRow(row);
-
-        QTableWidgetItem *portItem = new QTableWidgetItem();
-        portItem->setData(Qt::DisplayRole, info.port);
-
-        ui->mappingsTableWidget->setItem(row, 0, portItem);
-        ui->mappingsTableWidget->setItem(row, 1, new QTableWidgetItem(info.processName));
+        
+        // 客户端IP
+        ui->mappingsTableWidget->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(session->client_ip)));
+        
+        // 客户端端口
+        QTableWidgetItem *clientPortItem = new QTableWidgetItem();
+        clientPortItem->setData(Qt::DisplayRole, session->client_port);
+        ui->mappingsTableWidget->setItem(row, 1, clientPortItem);
+        
+        // 目标IP
+        ui->mappingsTableWidget->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(session->dest_ip)));
+        
+        // 目标端口
+        QTableWidgetItem *destPortItem = new QTableWidgetItem();
+        destPortItem->setData(Qt::DisplayRole, session->dest_port);
+        ui->mappingsTableWidget->setItem(row, 3, destPortItem);
+        
+        // 最后活动时间
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session->last_activity_time).count();
+        QString timeStr = QString("%1秒前").arg(elapsed);
+        ui->mappingsTableWidget->setItem(row, 4, new QTableWidgetItem(timeStr));
+        
+        row++;
     }
-
+    
     ui->mappingsTableWidget->setSortingEnabled(true); // 重新启用排序
     if (ui->mappingsTableWidget->rowCount() > 0) {
         ui->mappingsTableWidget->sortItems(0, Qt::AscendingOrder);
     }
+    
+    // 更新状态栏显示会话数
+    ui->statusbar->showMessage(QString("当前UDP会话数: %1").arg(sessions.size()), 2000);
 }
 
 void MainWindow::startForwarding() {
@@ -194,27 +246,25 @@ void MainWindow::startForwarding() {
     portProcessMonitor_->setTargetProcessNames(targetProcesses);
     portProcessMonitor_->setBlacklistProcessNames(appSettings_->getBlacklistProcessNames());
     portProcessMonitor_->setBlacklistMode(appSettings_->isBlacklistEnabled());
+    
+    // 设置IPv6状态
+    packetForwarder_->setEnableIpv6(appSettings_->isIpv6Enabled());
 
     int proxyPort = appSettings_->getProxyServerPort();
-    packetForwarder_->setProxyPort(proxyPort);
-    
-    // 设置PacketForwarder的MainWindow引用
-    packetForwarder_->setMainWindow(this);
 
     // 获取当前选中的SOCKS5服务器信息
     QPair<QString, int> socks5Info = appSettings_->getCurrentSocks5ServerInfo();
     QString socks5Address = socks5Info.first;
     int socks5Port = socks5Info.second;
-    
     proxyServer_->setSocks5Server(socks5Address.toStdString(), static_cast<uint16_t>(socks5Port));
-    qDebug() << "proxyServer_->start()";
     if (!proxyServer_->start(proxyPort, 14)) {
         ui->statusbar->showMessage("错误: 启动代理服务器失败", 5000);
         packetForwarder_->stop();
         return;
     }
-    packetForwarder_->setSocks5Server(socks5Address.toStdString(), static_cast<uint16_t>(socks5Port));
-    qDebug() << "packetForwarder_->start()";
+
+    udpPacketInjector_->initialize();
+    packetForwarder_->setProxyServer(proxyServer_);
     if (!packetForwarder_->start()) {
         ui->statusbar->showMessage("错误: 启动包转发器失败", 5000);
         return;
@@ -227,6 +277,9 @@ void MainWindow::startForwarding() {
     ui->editServerButton->setEnabled(false); // 启动后禁用编辑按钮
     ui->deleteServerButton->setEnabled(false); // 启动后禁用删除按钮
     ui->statusbar->showMessage("服务运行中...", 0);
+    
+    // 启动后立即更新一次UDP会话表格
+    updateUdpSessionView();
 }
 
 void MainWindow::stopForwarding() {
@@ -243,6 +296,9 @@ void MainWindow::stopForwarding() {
     ui->editServerButton->setEnabled(true); // 停止后启用编辑按钮
     ui->deleteServerButton->setEnabled(true); // 停止后启用删除按钮
     ui->statusbar->showMessage("服务已停止", 5000);
+    
+    // 停止后立即更新一次UDP会话表格，清空表格
+    updateUdpSessionView();
 }
 
 void MainWindow::on_startButton_clicked() { startForwarding(); }

@@ -29,6 +29,9 @@ public:
 
     void setProxyPort(int port);
     int getProxyPort() const;
+    
+    void setEnableIpv6(bool enable);
+    bool isIpv6Enabled() const;
 
 signals:
     void applySettings(); // 应用设置信号

@@ -38,6 +38,9 @@ public:
 
     QSet<QString> getBlacklistProcessNames() const;
     void setBlacklistProcessNames(const QSet<QString>& processNames);
+    
+    bool isIpv6Enabled() const;
+    void setIpv6Enabled(bool enabled);
 
 private:
     void        ensureConfigFileExists() const;

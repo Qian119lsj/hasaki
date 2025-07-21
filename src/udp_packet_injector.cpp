@@ -18,8 +18,10 @@ UdpPacketInjector::UdpPacketInjector() = default;
 UdpPacketInjector::~UdpPacketInjector() { shutdown(); }
 
 bool UdpPacketInjector::initialize() {
-    // We open a handle with a filter "false" because we only need it for injection, not for capturing.
-    // This is an efficient way to get a handle just for sending packets.
+    if (divertHandle_ != nullptr) {
+        qDebug() << "UdpPacketInjector already initialized.";
+        return true;
+    }
     divertHandle_ = WinDivertOpen("false", WINDIVERT_LAYER_NETWORK, 0, WINDIVERT_FLAG_SEND_ONLY);
     if (divertHandle_ == INVALID_HANDLE_VALUE) {
         DWORD lastError = GetLastError();
@@ -27,7 +29,7 @@ bool UdpPacketInjector::initialize() {
         if (lastError == ERROR_ACCESS_DENIED) {
             qDebug() << ">> Hint: This application must be run as an administrator.";
         }
-        divertHandle_ = nullptr; // Ensure handle is null on failure
+        divertHandle_ = nullptr;
         return false;
     }
     qDebug() << "UdpPacketInjector initialized successfully.";

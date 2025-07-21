@@ -8,50 +8,23 @@
 #define BATCH_SIZE 64
 #define PACKET_BUFFER_SIZE (BATCH_SIZE * 1500)
 
-PacketForwarder::PacketForwarder() { 
-    endpointMapper_ = EndpointMapper::getInstance(); 
+PacketForwarder::PacketForwarder() {
+    endpointMapper_ = EndpointMapper::getInstance();
+    enable_ipv6_ = true;
 }
 
 PacketForwarder::~PacketForwarder() { stop(); }
 
-void PacketForwarder::setSocks5Server(const std::string &addr, uint16_t port) {
-    socks5_address_ = addr;
-    socks5_port_ = port;
-}
+void PacketForwarder::setProxyServer(ProxyServer *proxyServer) { proxyServer_ = proxyServer; }
 
-void PacketForwarder::setProxyPort(uint16_t port) { proxy_port_ = port; }
-
-void PacketForwarder::setSocks5UdpRelay(const std::string &addr, uint16_t port) {
-    socks5_udp_relay_addr_ = addr;
-    socks5_udp_relay_port_ = port;
-    
-    // 设置UDP会话管理器的SOCKS5 UDP中继地址和端口
-    udp_session_manager_.setSocks5UdpRelay(addr, port);
-    
-    // 如果有MainWindow，设置接口映射表
-    if (mainWindow_) {
-        const QMap<QString, int>& adapterIpMap = mainWindow_->getAdapterIpMap();
-        hasaki::UdpSessionManager::InterfaceMap ifMap;
-        
-        for (auto it = adapterIpMap.begin(); it != adapterIpMap.end(); ++it) {
-            ifMap[it.key().toStdString()] = it.value();
-        }
-        
-        udp_session_manager_.setInterfaceMap(ifMap);
-    }
+void PacketForwarder::setEnableIpv6(bool enable) { 
+    enable_ipv6_ = enable;
+    qDebug() << "IPv6支持已" << (enable ? "启用" : "禁用");
 }
 
 bool PacketForwarder::start() {
-    // Seed for random port generation
-    srand(time(NULL));
-    
-    // 初始化UDP会话管理器
-    if (!udp_session_manager_.initialize()) {
-        qDebug() << "初始化UDP会话管理器失败";
-        return false;
-    }
-
-    net_handle_ = WinDivertOpen("outbound and (tcp or udp) and !impostor and ip.DstAddr!=127.0.0.1 and ip.DstAddr!=::1", WINDIVERT_LAYER_NETWORK, 0, 0);
+    net_handle_ = WinDivertOpen("outbound and (tcp or udp) and !impostor and remotePort!=5353 and (ip.DstAddr!=127.0.0.1 or ipv6.DstAddr!=::1)",
+                                WINDIVERT_LAYER_NETWORK, 0, 0);
     if (net_handle_ == INVALID_HANDLE_VALUE) {
         DWORD lastError = GetLastError();
         qDebug() << "打开WinDivert句柄失败: " << lastError;
@@ -64,6 +37,7 @@ bool PacketForwarder::start() {
     }
 
     net_thread_ = std::jthread([this](std::stop_token st) { this->net_thread_func(st); });
+    qDebug() << "PacketForwarder started.";
     return true;
 }
 
@@ -77,9 +51,6 @@ void PacketForwarder::stop() {
         net_thread_.join();
     }
 
-    // 关闭UDP会话管理器
-    udp_session_manager_.shutdown();
-
     // 清理所有映射
     if (endpointMapper_ != nullptr) {
         endpointMapper_->clearAllMappings();
@@ -89,18 +60,10 @@ void PacketForwarder::stop() {
 void PacketForwarder::setPortProcessMonitor(PortProcessMonitor *monitor) { portProcessMonitor_ = monitor; }
 
 void PacketForwarder::net_thread_func(std::stop_token st) {
+    uint16_t proxy_port = proxyServer_->getPort();
     UINT8 packetBuffer[PACKET_BUFFER_SIZE];
     UINT packetLen;
     WINDIVERT_ADDRESS addrBuffer[BATCH_SIZE];
-
-    // WinDivertSendEx 需要的缓冲区和地址数组
-    unsigned char send_packet_batch_buffer[PACKET_BUFFER_SIZE];
-    WINDIVERT_ADDRESS send_addr_array[BATCH_SIZE];
-
-    qDebug() << "Network listener thread started.";
-
-    UINT send_total_packet_data_len;
-    UINT send_num_packets_in_batch;
 
     while (!st.stop_requested()) {
         UINT addrLen = sizeof(addrBuffer);
@@ -120,49 +83,72 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                 break;
             }
         }
-        UINT8 packetsReceived = addrLen / sizeof(WINDIVERT_ADDRESS);
-        PWINDIVERT_IPHDR ipHdr = NULL;
-        PWINDIVERT_IPV6HDR ipv6Hdr = NULL;
-        PWINDIVERT_TCPHDR tcpHdr = NULL;
-        PWINDIVERT_UDPHDR udpHdr = NULL;
-        UINT8 protocol = 0;
-        UINT addrIndex = 0;
-        send_total_packet_data_len = 0;
-        send_num_packets_in_batch = 0;
+        UINT8 protocol = 0; // 协议类型
 
-        PVOID pCurrentPacketInBatch = packetBuffer;
-        UINT currentRemainingLenInBatch = packetLen;
+        // WinDivertSendEx 需要的缓冲区和地址数组
+        unsigned char send_packet_batch_buffer[PACKET_BUFFER_SIZE];
+        WINDIVERT_ADDRESS send_addr_array[BATCH_SIZE];
 
-        while (WinDivertHelperParsePacket(pCurrentPacketInBatch, currentRemainingLenInBatch, &ipHdr, &ipv6Hdr, &protocol, NULL, NULL, &tcpHdr, &udpHdr, NULL,
-                                          NULL, &pCurrentPacketInBatch, &currentRemainingLenInBatch)) {
-            if (addrIndex >= packetsReceived) {
+        UINT length_of_packets_to_be_sent = 0;
+        UINT num_of_packets_to_be_sent = 0;
+
+        PVOID packet_addr = packetBuffer;
+        UINT remaining_packets_length = packetLen;
+
+        UINT8 num_of_total_packets = addrLen / sizeof(WINDIVERT_ADDRESS);
+        UINT index = 0; // 当前处理的数据包索引
+        while (true) {
+
+            // 解析数据包
+            PWINDIVERT_IPHDR ipHdr = nullptr;
+            PWINDIVERT_IPV6HDR ipv6Hdr = nullptr;
+            PWINDIVERT_TCPHDR tcpHdr = nullptr;
+            PWINDIVERT_UDPHDR udpHdr = nullptr;
+
+            char *packet_data = nullptr; // udp有效载荷
+            UINT packet_data_len = 0;    // udp有效载荷长度
+
+            if (remaining_packets_length == 0) {
+                break;
+            }
+            PVOID pStartOfCurrentPacket = packet_addr;
+            UINT lenBeforeParse = remaining_packets_length;
+
+            if (!WinDivertHelperParsePacket(packet_addr, remaining_packets_length, &ipHdr, &ipv6Hdr, &protocol, NULL, NULL, &tcpHdr, &udpHdr,
+                                            (PVOID *)&packet_data, &packet_data_len, &packet_addr, &remaining_packets_length)) {
+                qDebug() << "WinDivertHelperParsePacket failed, remaining " << remaining_packets_length << " bytes";
+                break;
+            }
+
+            if (index >= num_of_total_packets) {
                 qDebug() << "错误: 解析出的数据包数量超过了 RecvEx 报告的地址数量。";
                 break;
             }
-            WINDIVERT_ADDRESS addr = addrBuffer[addrIndex++];
-            PVOID packet_data_to_send = NULL;
-            UINT packet_data_len_to_send = 0;
+            WINDIVERT_ADDRESS addr = addrBuffer[index++];
+
+            if (addr.IPv6 == 1 && enable_ipv6_ == false) {
+                continue;
+            }
 
             std::string srcAddrString;
             std::string dstAddrString;
 
-            if (ipHdr != NULL) {
-                packet_data_to_send = (PVOID)ipHdr;
-                packet_data_len_to_send = WinDivertHelperNtohs(ipHdr->Length);
-                srcAddrString = FormatIpv4Address(ipHdr->SrcAddr);
-                dstAddrString = FormatIpv4Address(ipHdr->DstAddr);
-            } else if (ipv6Hdr != NULL) {
-                packet_data_to_send = (PVOID)ipv6Hdr;
-                packet_data_len_to_send = sizeof(WINDIVERT_IPV6HDR) + WinDivertHelperNtohs(ipv6Hdr->Length);
-                srcAddrString = FormatIpv6Address(ipv6Hdr->SrcAddr);
-                dstAddrString = FormatIpv6Address(ipv6Hdr->DstAddr);
+            if (ipHdr != nullptr) {
+                srcAddrString = Utils::FormatIpv4Address(ipHdr->SrcAddr);
+                dstAddrString = Utils::FormatIpv4Address(ipHdr->DstAddr);
+            } else if (ipv6Hdr != nullptr) {
+                srcAddrString = Utils::FormatIpv6Address(ipv6Hdr->SrcAddr);
+                dstAddrString = Utils::FormatIpv6Address(ipv6Hdr->DstAddr);
             }
 
-            if (tcpHdr != NULL) {
+
+            UINT packet_data_len_to_send = lenBeforeParse - remaining_packets_length;// 当前数据包长度=解析前剩余长度-解析后剩余长度
+            // qDebug() << "packet: srcAddrString: " << srcAddrString << ", dstAddrString: " << dstAddrString;
+            if (tcpHdr != nullptr) {
                 UINT16 srcPort = WinDivertHelperNtohs(tcpHdr->SrcPort);
                 UINT16 dstPort = WinDivertHelperNtohs(tcpHdr->DstPort);
                 if (addr.IPv6 == 1) {
-                    if (srcPort == proxy_port_) {
+                    if (srcPort == proxy_port) {
                         // 代理程序返回给客户端的数据 (IPv6)
                         std::string tcpTupleKey = endpointMapper_->createIpv6EndpointKey(dstAddrString, dstPort); // KEY: 原目标地址+伪端口
 
@@ -174,7 +160,7 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                             memcpy(ipv6Hdr->DstAddr, tcpTuple.srcAddr, 16);
                             tcpHdr->DstPort = tcpTuple.srcPort;
                             addr.Outbound = FALSE;
-                            WinDivertHelperCalcChecksums(packet_data_to_send, packet_data_len_to_send, &addr, 0);
+                            WinDivertHelperCalcChecksums(pStartOfCurrentPacket, packet_data_len_to_send, &addr, 0);
                         } else {
                             qDebug() << "tcpTupleKey: " << tcpTupleKey << " 未找到活动映射";
                             // 丢弃包
@@ -193,13 +179,13 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                             memcpy(ipv6Hdr->SrcAddr, ipv6Hdr->DstAddr, 16);
                             tcpHdr->SrcPort = WinDivertHelperHtons(pseudoPort);
                             memcpy(ipv6Hdr->DstAddr, srcAddr, 16);
-                            tcpHdr->DstPort = WinDivertHelperHtons(proxy_port_);
+                            tcpHdr->DstPort = WinDivertHelperHtons(proxy_port);
                             addr.Outbound = FALSE;
-                            WinDivertHelperCalcChecksums(packet_data_to_send, packet_data_len_to_send, &addr, 0);
+                            WinDivertHelperCalcChecksums(pStartOfCurrentPacket, packet_data_len_to_send, &addr, 0);
                         }
                     }
                 } else {
-                    if (srcPort == proxy_port_) {
+                    if (srcPort == proxy_port) {
                         // 代理程序返回给客户端的数据
                         std::string tcpTupleKey = endpointMapper_->createIpv4EndpointKey(dstAddrString, dstPort); // KEY: 原目标地址+伪端口
 
@@ -211,7 +197,7 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                             ipHdr->DstAddr = tcpTuple.srcAddr;
                             tcpHdr->DstPort = tcpTuple.srcPort;
                             addr.Outbound = FALSE;
-                            WinDivertHelperCalcChecksums(packet_data_to_send, packet_data_len_to_send, &addr, 0);
+                            WinDivertHelperCalcChecksums(pStartOfCurrentPacket, packet_data_len_to_send, &addr, 0);
                         } else {
                             qDebug() << "tcpTupleKey: " << tcpTupleKey << " 未找到活动映射";
                             // 丢弃包
@@ -228,73 +214,48 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                             ipHdr->SrcAddr = ipHdr->DstAddr;
                             tcpHdr->SrcPort = WinDivertHelperHtons(pseudoPort);
                             ipHdr->DstAddr = srcAddr;
-                            tcpHdr->DstPort = WinDivertHelperHtons(proxy_port_);
+                            tcpHdr->DstPort = WinDivertHelperHtons(proxy_port);
                             addr.Outbound = FALSE;
-                            WinDivertHelperCalcChecksums(packet_data_to_send, packet_data_len_to_send, &addr, 0);
+                            WinDivertHelperCalcChecksums(pStartOfCurrentPacket, packet_data_len_to_send, &addr, 0);
                         }
                     }
                 }
             }
-            if (udpHdr != NULL) {
+            if (udpHdr != nullptr) {
                 UINT16 srcPort = WinDivertHelperNtohs(udpHdr->SrcPort);
                 UINT16 dstPort = WinDivertHelperNtohs(udpHdr->DstPort);
 
-                if (addr.IPv6 == 1) {
-                    // 客户端发出的UDP包 (IPv6)
-                    if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
-                        // 暂时不处理53端口
-                        if (dstPort != 53) {
-                            // 使用UDP会话管理器处理IPv6 UDP数据包
-                            bool handled = udp_session_manager_.handleUdpPacket(
-                                (const char*)((const UINT8*)ipv6Hdr + sizeof(WINDIVERT_IPV6HDR) + sizeof(WINDIVERT_UDPHDR)),
-                                packet_data_len_to_send - sizeof(WINDIVERT_IPV6HDR) - sizeof(WINDIVERT_UDPHDR),
-                                srcAddrString, srcPort, dstAddrString, dstPort,
-                                true, 0);
-                            
-                            if (handled) {
-                                // 数据包已处理，不需要继续发送
-                                continue;
-                            }
+                if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
+                    if (dstPort != 53) { // 暂时不处理53端口
+                        // 使用UDP会话管理器处理IPv6 UDP数据包
+                        bool handled = proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6);
+                        if (!handled) {
+                            qDebug() << "UDP 数据包未处理";
                         }
-                    }
-                } else {
-                    // 客户端发出的UDP包 (IPv4)
-                    // 暂时不处理53端口
-                    if (dstPort != 53) {
-                        if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
-                            // 使用UDP会话管理器处理IPv4 UDP数据包
-                            bool handled = udp_session_manager_.handleUdpPacket(
-                                (const char*)((const UINT8*)ipHdr + ipHdr->HdrLength * 4 + sizeof(WINDIVERT_UDPHDR)),
-                                packet_data_len_to_send - ipHdr->HdrLength * 4 - sizeof(WINDIVERT_UDPHDR),
-                                srcAddrString, srcPort, dstAddrString, dstPort,
-                                false, 0);
-                            
-                            if (handled) {
-                                // 数据包已处理，不需要继续发送
-                                continue;
-                            }
-                        }
+                        continue;
                     }
                 }
             }
-            if (send_num_packets_in_batch < packetsReceived && (send_total_packet_data_len + packet_data_len_to_send) <= sizeof(send_packet_batch_buffer)) {
-                memcpy(send_packet_batch_buffer + send_total_packet_data_len, packet_data_to_send, packet_data_len_to_send);
-                send_total_packet_data_len += packet_data_len_to_send;
-                send_addr_array[send_num_packets_in_batch] = addr;
-                send_num_packets_in_batch++;
+
+            if (num_of_packets_to_be_sent < num_of_total_packets && // 数据包数量还没满
+                (length_of_packets_to_be_sent + packet_data_len_to_send) <= sizeof(send_packet_batch_buffer)) { // 缓冲区够用
+                memcpy(send_packet_batch_buffer + length_of_packets_to_be_sent, pStartOfCurrentPacket, packet_data_len_to_send); // 拷贝包
+                length_of_packets_to_be_sent += packet_data_len_to_send; // 更新数据包长度
+                send_addr_array[num_of_packets_to_be_sent] = addr; // 将当前数据包地址添加到地址数组
+                num_of_packets_to_be_sent++; // 更新数据包数量
             } else {
-                qDebug() << "警告: 发送批处理缓冲区已满或单个数据包过大 (" << packet_data_len_to_send << " bytes)，数据包 " << addrIndex
+                qDebug() << "警告: 发送批处理缓冲区已满或单个数据包过大 (" << packet_data_len_to_send << " bytes)，数据包 " << index
                          << " 未添加到当前发送批次。";
             }
         }
 
-        if (currentRemainingLenInBatch > 0 && addrIndex < packetsReceived) {
-            qDebug() << "警告: 在解析完 " << addrIndex << " 个数据包后，批处理中仍有 " << currentRemainingLenInBatch << " 字节数据剩余。";
+        if (remaining_packets_length > 0) {
+            qDebug() << "警告: 在解析完 " << index << " 个数据包后，批处理中仍有 " << remaining_packets_length << " 字节数据剩余。";
         }
 
-        if (send_num_packets_in_batch > 0) {
-            if (!WinDivertSendEx(net_handle_, send_packet_batch_buffer, send_total_packet_data_len, NULL, 0, send_addr_array,
-                                 send_num_packets_in_batch * sizeof(WINDIVERT_ADDRESS), NULL)) {
+        if (num_of_packets_to_be_sent > 0) {
+            if (!WinDivertSendEx(net_handle_, send_packet_batch_buffer, length_of_packets_to_be_sent, NULL, 0, send_addr_array,
+                                 num_of_packets_to_be_sent * sizeof(WINDIVERT_ADDRESS), NULL)) {
                 if (st.stop_requested()) {
                     break;
                 }

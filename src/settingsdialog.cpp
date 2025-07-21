@@ -57,6 +57,16 @@ void SettingsDialog::setProxyPort(int port)
 
 int SettingsDialog::getProxyPort() const { return ui->proxyPortLineEdit->text().toInt(); }
 
+void SettingsDialog::setEnableIpv6(bool enable)
+{
+    ui->enableIpv6CheckBox->setChecked(enable);
+}
+
+bool SettingsDialog::isIpv6Enabled() const
+{
+    return ui->enableIpv6CheckBox->isChecked();
+}
+
 void SettingsDialog::on_addButton_clicked() {
     const QString newProcess = ui->lineEdit->text().trimmed();
     if (!newProcess.isEmpty()) {

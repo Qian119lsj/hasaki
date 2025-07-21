@@ -24,12 +24,12 @@ set(SOURCES
     src/proxy_server.cpp
     src/socks5_client.cpp
     src/endpoint_mapper.cpp
-    src/proxy_session.cpp
     src/socks5serverdialog.cpp
     src/delayed_delete_manager.cpp
     src/udp_packet_injector.cpp
     src/udptestdialog.cpp
     src/udp_session_manager.cpp
+    src/tcp_session_manager.cpp
 )
 
 file(GLOB_RECURSE UIS "src/*.ui")
@@ -48,12 +48,36 @@ set(HEADERS
     include/hasaki/udp_packet_injector.h
     include/hasaki/udptestdialog.h
     include/hasaki/udp_session_manager.h
+    include/hasaki/tcp_session_manager.h
 )
 
-qt_add_executable(hasaki WIN32
+# Windows资源文件和清单
+if(WIN32)
+    # 禁用默认清单生成
+    if(MSVC)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /MANIFEST:NO")
+    endif()
+    
+    # 配置清单文件
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/hasaki.manifest"
+        "${CMAKE_CURRENT_BINARY_DIR}/hasaki.manifest"
+        COPYONLY
+    )
+    
+    # 创建RC文件
+    set(RC_FILE "${CMAKE_CURRENT_BINARY_DIR}/hasaki.rc")
+    file(WRITE "${RC_FILE}" "#include <windows.h>\n")
+    file(APPEND "${RC_FILE}" "1 24 \"${CMAKE_CURRENT_BINARY_DIR}/hasaki.manifest\"\n")
+    
+    set(PLATFORM_SPECIFIC_FILES ${RC_FILE})
+endif()
+
+qt_add_executable(hasaki
     ${SOURCES}
     ${UIS}
     ${HEADERS}
+    ${PLATFORM_SPECIFIC_FILES}
 )
 
 

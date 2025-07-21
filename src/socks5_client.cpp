@@ -3,10 +3,6 @@
 #include <QDebug>
 #include <ws2tcpip.h>
 
-Socks5Client::Socks5Client() {}
-
-Socks5Client::~Socks5Client() {}
-
 SOCKET Socks5Client::connectTarget(const std::string &socks5_addr, uint16_t socks5_port, const std::string &target_addr, uint16_t target_port) {
     // 创建套接字
     SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -343,4 +339,25 @@ SOCKET Socks5Client::associateUdp(const std::string &socks5_addr, uint16_t socks
     // UDP关联成功，返回TCP控制连接的套接字。
     // 调用者需要保持此连接以维持UDP关联，并在结束时关闭它。
     return sock;
+}
+
+size_t Socks5Client::constructSocks5UdpHeader(char *header, const std::string &target_addr, uint16_t target_port, bool is_ipv6) {
+    size_t header_len = 0;
+    header[0] = 0x00; // RSV
+    header[1] = 0x00; // RSV
+    header[2] = 0x00; // FRAG
+
+    if (!is_ipv6) {
+        header[3] = 0x01; // ATYP: IPv4
+        inet_pton(AF_INET, target_addr.c_str(), &header[4]);
+        *(uint16_t *)&header[8] = htons(target_port);
+        header_len = 10;
+    } else {
+        header[3] = 0x04; // ATYP: IPv6
+        inet_pton(AF_INET6, target_addr.c_str(), &header[4]);
+        *(uint16_t *)&header[20] = htons(target_port);
+        header_len = 22;
+    }
+
+    return header_len;
 }
