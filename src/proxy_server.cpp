@@ -33,6 +33,9 @@ void ProxyServer::setAdapterIpMap(const QMap<QString, int> &adapter_ip_map) { ad
 void ProxyServer::setUdpPacketInjector(hasaki::UdpPacketInjector *udp_packet_injector) { udp_packet_injector_ = udp_packet_injector; }
 
 bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
+    
+    udp_session_manager_->start();
+
     if (socks5_address_.empty() || socks5_port_ == 0) {
         qDebug() << "错误: 未设置SOCKS5服务器地址和端口";
         return false;
@@ -193,6 +196,9 @@ void ProxyServer::stop() {
         CloseHandle(iocp_handle_);
         iocp_handle_ = nullptr;
     }
+
+    tcp_session_manager_->clearAllSessions();
+    udp_session_manager_->shutdown();
 
     WSACleanup();
     qDebug() << "代理服务器已停止";
@@ -456,6 +462,8 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
 }
 
 void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_session, DWORD bytes_transferred) {
+    // qDebug() << "handle_udp_receive";
+
     auto io_context = udp_session->io_context.get();
     const char *data = io_context->buffer;
     if (bytes_transferred < 10) {
@@ -487,6 +495,13 @@ void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_ses
         // 不支持的地址类型
         qDebug() << "不支持的地址类型: " << static_cast<int>(atyp);
         return;
+    }
+
+    if (udp_session->dest_ip != orig_dst_addr) {
+        qDebug() << "receive: UDP会话的目标IP不匹配: " << udp_session->dest_ip << " != " << orig_dst_addr;
+    }
+    if (udp_session->dest_port != orig_dst_port) {
+        qDebug() << "receive: UDP会话的目标端口不匹配: " << udp_session->dest_port << " != " << orig_dst_port;
     }
 
     // 获取网络接口索引
@@ -620,6 +635,7 @@ bool ProxyServer::handle_tcp_send(PerIOContext *io_context, DWORD bytes_transfer
 }
 
 void ProxyServer::handle_udp_send(PerIOContext *io_context, DWORD bytes_transferred) {
+    // qDebug() << "handle_udp_send";
     // Sending completed, just clean up the context.
     // delete io_context;
 }
@@ -657,6 +673,7 @@ void ProxyServer::post_tcp_accept(SOCKET listen_socket, PerIOContext *io_context
 }
 
 void ProxyServer::post_udp_recv(std::shared_ptr<hasaki::UdpSession> udp_session) {
+    // qDebug() << "post_udp_recv";
     auto io_context = udp_session->io_context.get();
     io_context->reset();
     io_context->operation = IO_RECV_UDP;
@@ -681,6 +698,13 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
     if (!session) {
         qDebug() << "创建UDP会话失败";
         return false;
+    }
+
+    if (session->dest_ip != dst_ip) {
+        qDebug() << "UDP会话的目标IP不匹配: " << session->dest_ip << " != " << dst_ip;
+    }
+    if (session->dest_port != dst_port) {
+        qDebug() << "UDP会话的目标端口不匹配: " << session->dest_port << " != " << dst_port;
     }
 
     // 构造SOCKS5 UDP请求头

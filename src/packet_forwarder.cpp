@@ -17,7 +17,7 @@ PacketForwarder::~PacketForwarder() { stop(); }
 
 void PacketForwarder::setProxyServer(ProxyServer *proxyServer) { proxyServer_ = proxyServer; }
 
-void PacketForwarder::setEnableIpv6(bool enable) { 
+void PacketForwarder::setEnableIpv6(bool enable) {
     enable_ipv6_ = enable;
     qDebug() << "IPv6支持已" << (enable ? "启用" : "禁用");
 }
@@ -126,10 +126,6 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
             }
             WINDIVERT_ADDRESS addr = addrBuffer[index++];
 
-            if (addr.IPv6 == 1 && enable_ipv6_ == false) {
-                continue;
-            }
-
             std::string srcAddrString;
             std::string dstAddrString;
 
@@ -141,8 +137,7 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                 dstAddrString = Utils::FormatIpv6Address(ipv6Hdr->DstAddr);
             }
 
-
-            UINT packet_data_len_to_send = lenBeforeParse - remaining_packets_length;// 当前数据包长度=解析前剩余长度-解析后剩余长度
+            UINT packet_data_len_to_send = lenBeforeParse - remaining_packets_length; // 当前数据包长度=解析前剩余长度-解析后剩余长度
             // qDebug() << "packet: srcAddrString: " << srcAddrString << ", dstAddrString: " << dstAddrString;
             if (tcpHdr != nullptr) {
                 UINT16 srcPort = WinDivertHelperNtohs(tcpHdr->SrcPort);
@@ -169,6 +164,11 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                     } else {
                         // 客户端出方向数据包 (IPv6)
                         if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
+
+                            if (enable_ipv6_ == false) {
+                                continue;
+                            }
+
                             // 获取或创建映射
                             uint16_t pseudoPort = endpointMapper_->getOrCreateIpv6TcpMapping((const UINT8 *)ipv6Hdr->SrcAddr, tcpHdr->SrcPort,
                                                                                              (const UINT8 *)ipv6Hdr->DstAddr, tcpHdr->DstPort);
@@ -226,6 +226,9 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                 UINT16 dstPort = WinDivertHelperNtohs(udpHdr->DstPort);
 
                 if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
+                    if (enable_ipv6_ == false && addr.IPv6 == 1) {
+                        continue;
+                    }
                     if (dstPort != 53) { // 暂时不处理53端口
                         // 使用UDP会话管理器处理IPv6 UDP数据包
                         bool handled = proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6);
@@ -237,12 +240,12 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                 }
             }
 
-            if (num_of_packets_to_be_sent < num_of_total_packets && // 数据包数量还没满
-                (length_of_packets_to_be_sent + packet_data_len_to_send) <= sizeof(send_packet_batch_buffer)) { // 缓冲区够用
+            if (num_of_packets_to_be_sent < num_of_total_packets &&                                                              // 数据包数量还没满
+                (length_of_packets_to_be_sent + packet_data_len_to_send) <= sizeof(send_packet_batch_buffer)) {                  // 缓冲区够用
                 memcpy(send_packet_batch_buffer + length_of_packets_to_be_sent, pStartOfCurrentPacket, packet_data_len_to_send); // 拷贝包
-                length_of_packets_to_be_sent += packet_data_len_to_send; // 更新数据包长度
+                length_of_packets_to_be_sent += packet_data_len_to_send;                                                         // 更新数据包长度
                 send_addr_array[num_of_packets_to_be_sent] = addr; // 将当前数据包地址添加到地址数组
-                num_of_packets_to_be_sent++; // 更新数据包数量
+                num_of_packets_to_be_sent++;                       // 更新数据包数量
             } else {
                 qDebug() << "警告: 发送批处理缓冲区已满或单个数据包过大 (" << packet_data_len_to_send << " bytes)，数据包 " << index
                          << " 未添加到当前发送批次。";

@@ -53,6 +53,7 @@ public:
     
     ~UdpSessionManager();
 
+    void start();
     // 关闭会话管理器
     void shutdown();
     // 获取或创建UDP会话

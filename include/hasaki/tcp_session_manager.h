@@ -34,7 +34,7 @@ public:
     static TcpSessionManager *getInstance();
     std::shared_ptr<TcpSession> createSession(SOCKET client_socket, SOCKET target_socket, const std::string &key, MappingType mapping_type);
     void closeSession(SOCKET client_socket);
-
+    void clearAllSessions();
 private:
     TcpSessionManager();
     void createDelayedRemover(const std::string &key, MappingType type);

@@ -17,11 +17,19 @@ UdpSessionManager* UdpSessionManager::getInstance() {
 }
 
 UdpSessionManager::UdpSessionManager() {
-    cleanup_thread_ = std::thread(&UdpSessionManager::cleanup_task, this);
-    running_ = true;
+    running_ = false;
 }
 
 UdpSessionManager::~UdpSessionManager() { shutdown(); }
+
+void UdpSessionManager::start() {
+    if (running_) {
+        return;
+    }
+    cleanup_thread_ = std::thread(&UdpSessionManager::cleanup_task, this);
+    running_ = true;
+    qDebug() << "UDP会话管理器已启动";
+}
 
 void UdpSessionManager::shutdown() {
     running_ = false;
@@ -121,7 +129,7 @@ std::shared_ptr<UdpSession> UdpSessionManager::getOrCreateSession(const std::str
 void UdpSessionManager::cleanup_task() {
     using namespace std::chrono_literals;
     while (running_) {
-        std::this_thread::sleep_for(120s);
+        std::this_thread::sleep_for(2s);
 
         std::vector<std::string> keys_to_remove;
         std::vector<std::shared_ptr<UdpSession>> sockets_to_close;
@@ -150,7 +158,7 @@ void UdpSessionManager::cleanup_task() {
                 sessions_.erase(key);
             }
         }
-        qDebug() << "清理UDP会话: " << keys_to_remove.size() << "个会话, 当前会话数: " << sessions_.size();
+        // qDebug() << "清理UDP会话: " << keys_to_remove.size() << "个会话, 当前会话数: " << sessions_.size();
     }
 }
 

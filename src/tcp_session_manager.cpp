@@ -61,4 +61,17 @@ void TcpSessionManager::createDelayedRemover(const std::string &key, MappingType
     DelayedDeleteManager::getInstance()->addTask(key, type);
 }
 
+void TcpSessionManager::clearAllSessions() {
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    for (auto &session : sessions_) {
+        if (session.second->client_socket != INVALID_SOCKET) {
+            closesocket(session.second->client_socket);
+        }
+        if (session.second->target_socket != INVALID_SOCKET) {
+            closesocket(session.second->target_socket);
+        }
+    }
+    sessions_.clear();
+}
+
 } // namespace hasaki
