@@ -463,7 +463,7 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
 
 void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_session, DWORD bytes_transferred) {
     // qDebug() << "handle_udp_receive";
-
+    udp_session->update_activity_time();
     auto io_context = udp_session->io_context.get();
     const char *data = io_context->buffer;
     if (bytes_transferred < 10) {
@@ -495,13 +495,6 @@ void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_ses
         // 不支持的地址类型
         qDebug() << "不支持的地址类型: " << static_cast<int>(atyp);
         return;
-    }
-
-    if (udp_session->dest_ip != orig_dst_addr) {
-        qDebug() << "receive: UDP会话的目标IP不匹配: " << udp_session->dest_ip << " != " << orig_dst_addr;
-    }
-    if (udp_session->dest_port != orig_dst_port) {
-        qDebug() << "receive: UDP会话的目标端口不匹配: " << udp_session->dest_port << " != " << orig_dst_port;
     }
 
     // 获取网络接口索引
@@ -700,13 +693,6 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
         return false;
     }
 
-    if (session->dest_ip != dst_ip) {
-        qDebug() << "UDP会话的目标IP不匹配: " << session->dest_ip << " != " << dst_ip;
-    }
-    if (session->dest_port != dst_port) {
-        qDebug() << "UDP会话的目标端口不匹配: " << session->dest_port << " != " << dst_port;
-    }
-
     // 构造SOCKS5 UDP请求头
     char header[512];
     size_t header_len = Socks5Client::constructSocks5UdpHeader(header, dst_ip, dst_port, is_ipv6);
@@ -729,6 +715,9 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
     // 发送数据到SOCKS5服务器
     bool result = sendToSocks5Server(session, send_buffer, header_len + packet_len);
 
+    if (!result) {
+        qDebug() << "发送UDP数据到SOCKS5服务器失败: " << WSAGetLastError() << "remote_addr: " << dst_ip << ":" << dst_port;
+    }
     delete[] send_buffer;
 
     if (is_new_session) {
@@ -780,7 +769,6 @@ bool ProxyServer::sendToSocks5Server(const std::shared_ptr<hasaki::UdpSession> &
     int bytes_sent = sendto(session->local_socket, data, data_len, 0, (sockaddr *)&to_addr, to_addr_len);
 
     if (bytes_sent == SOCKET_ERROR) {
-        qDebug() << "发送UDP数据到SOCKS5服务器失败: " << WSAGetLastError() << "remote_addr: " << session->dest_ip << ":" << session->dest_port;
         return false;
     }
 

@@ -16,15 +16,13 @@ struct UdpSession {
     SOCKET local_socket;         // 本地UDP套接字
     std::string client_ip;       // 客户端IP
     uint16_t client_port;        // 客户端端口
-    std::string dest_ip;         // 目标IP
-    uint16_t dest_port;          // 目标端口
     bool is_ipv6;                // 是否为IPv6
     std::chrono::steady_clock::time_point last_activity_time; // 记录上次活动时间
     
     // UdpSession也拥有其I/O操作的上下文
     std::unique_ptr<PerIOContext> io_context; 
 
-    UdpSession() : local_socket(INVALID_SOCKET), client_port(0), dest_port(0), is_ipv6(false) {
+    UdpSession() : local_socket(INVALID_SOCKET), client_port(0), is_ipv6(false) {
         last_activity_time = std::chrono::steady_clock::now();
         io_context = std::make_unique<PerIOContext>();
     }

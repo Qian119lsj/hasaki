@@ -18,8 +18,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     initializeAdapterIpMap();
 
     // 设置UDP会话表格
-    ui->mappingsTableWidget->setColumnCount(5);
-    ui->mappingsTableWidget->setHorizontalHeaderLabels({"客户端IP", "客户端端口", "目标IP", "目标端口", "最后活动时间"});
+    ui->mappingsTableWidget->setColumnCount(3);
+    ui->mappingsTableWidget->setHorizontalHeaderLabels({"客户端IP", "客户端端口", "最后活动时间"});
     ui->mappingsTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
     // 初始化组件
@@ -184,6 +184,10 @@ void MainWindow::updateMappingsView() {
 }
 
 void MainWindow::updateUdpSessionView() {
+    // 保存当前排序状态
+    int currentSortColumn = ui->mappingsTableWidget->horizontalHeader()->sortIndicatorSection();
+    Qt::SortOrder currentSortOrder = ui->mappingsTableWidget->horizontalHeader()->sortIndicatorOrder();
+    
     ui->mappingsTableWidget->setRowCount(0); // 清空表格
     
     // 获取UDP会话数据
@@ -203,28 +207,26 @@ void MainWindow::updateUdpSessionView() {
         // 客户端端口
         QTableWidgetItem *clientPortItem = new QTableWidgetItem();
         clientPortItem->setData(Qt::DisplayRole, session->client_port);
-        ui->mappingsTableWidget->setItem(row, 1, clientPortItem);
-        
-        // 目标IP
-        ui->mappingsTableWidget->setItem(row, 2, new QTableWidgetItem(QString::fromStdString(session->dest_ip)));
-        
-        // 目标端口
-        QTableWidgetItem *destPortItem = new QTableWidgetItem();
-        destPortItem->setData(Qt::DisplayRole, session->dest_port);
-        ui->mappingsTableWidget->setItem(row, 3, destPortItem);
+        ui->mappingsTableWidget->setItem(row, 1, clientPortItem); // 客户端端口
         
         // 最后活动时间
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session->last_activity_time).count();
         QString timeStr = QString("%1秒前").arg(elapsed);
-        ui->mappingsTableWidget->setItem(row, 4, new QTableWidgetItem(timeStr));
+        
+        TimeWidgetItem *timeItem = new TimeWidgetItem(timeStr);
+        // 使用UserRole存储原始时间戳（秒数）用于排序
+        timeItem->setData(Qt::UserRole, static_cast<qint64>(elapsed));
+        ui->mappingsTableWidget->setItem(row, 2, timeItem);
         
         row++;
     }
     
     ui->mappingsTableWidget->setSortingEnabled(true); // 重新启用排序
+    
+    // 恢复之前的排序状态
     if (ui->mappingsTableWidget->rowCount() > 0) {
-        ui->mappingsTableWidget->sortItems(0, Qt::AscendingOrder);
+        ui->mappingsTableWidget->sortItems(currentSortColumn, currentSortOrder);
     }
     
     // 更新状态栏显示会话数

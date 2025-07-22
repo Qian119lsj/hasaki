@@ -13,6 +13,7 @@
 #include <QMap>
 #include <QPair>
 #include <QTimer>
+#include <QTableWidgetItem>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -26,6 +27,17 @@ class EndpointMapper;
 class PacketForwarder;
 class ProxyServer;
 class SettingsDialog;
+
+// 为实现自定义排序，创建一个QTableWidgetItem的子类
+class TimeWidgetItem : public QTableWidgetItem {
+public:
+    TimeWidgetItem(const QString &text) : QTableWidgetItem(text) {}
+
+    bool operator<(const QTableWidgetItem &other) const override {
+        // 比较存储在UserRole中的数值
+        return data(Qt::UserRole).toLongLong() < other.data(Qt::UserRole).toLongLong();
+    }
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT

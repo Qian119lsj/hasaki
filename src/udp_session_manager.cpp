@@ -76,8 +76,6 @@ std::shared_ptr<UdpSession> UdpSessionManager::getOrCreateSession(const std::str
     auto session = std::make_shared<UdpSession>();
     session->client_ip = client_ip;
     session->client_port = client_port;
-    session->dest_ip = dest_ip;
-    session->dest_port = dest_port;
     session->is_ipv6 = is_ipv6;
 
     // 创建本地UDP套接字
@@ -138,7 +136,7 @@ void UdpSessionManager::cleanup_task() {
             std::lock_guard<std::mutex> lock(sessions_mutex_);
             auto now = std::chrono::steady_clock::now();
             for (auto const &[key, session] : sessions_) {
-                if (now - session->last_activity_time > 120s) {
+                if (now - session->last_activity_time > 300s) {
                     keys_to_remove.push_back(key);
                     sockets_to_close.push_back(session);
                 }
