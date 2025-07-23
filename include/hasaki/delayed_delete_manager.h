@@ -28,6 +28,9 @@ public:
     // 停止管理器
     void stop();
 
+    // 清除所有任务
+    void clearAllTasks();
+
     // 析构函数
     ~DelayedDeleteManager();
 

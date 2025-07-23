@@ -1,4 +1,5 @@
 #include "hasaki/udp_session_manager.h"
+#include "hasaki/portprocessmonitor.h"
 #include <QDebug>
 #include <sstream>
 
@@ -21,6 +22,8 @@ UdpSessionManager::UdpSessionManager() {
 }
 
 UdpSessionManager::~UdpSessionManager() { shutdown(); }
+
+void UdpSessionManager::setPortProcessMonitor(PortProcessMonitor *monitor) { portProcessMonitor_ = monitor; }
 
 void UdpSessionManager::start() {
     if (running_) {
@@ -137,8 +140,19 @@ void UdpSessionManager::cleanup_task() {
             auto now = std::chrono::steady_clock::now();
             for (auto const &[key, session] : sessions_) {
                 if (now - session->last_activity_time > 300s) {
-                    keys_to_remove.push_back(key);
-                    sockets_to_close.push_back(session);
+                    // 检查端口是否在portProcessMonitor_的映射中
+                    bool should_remove = true;
+                    if (portProcessMonitor_) {
+                        // 只有当端口不在portProcessMonitor_的映射中时才加入清理列表
+                        if (portProcessMonitor_->isPortInTargetProcess(session->client_port)) {
+                            should_remove = false;
+                        }
+                    }
+                    
+                    if (should_remove) {
+                        keys_to_remove.push_back(key);
+                        sockets_to_close.push_back(session);
+                    }
                 }
             }
         }

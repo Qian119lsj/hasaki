@@ -136,7 +136,7 @@ bool EndpointMapper::removeMapping(const std::string& key, MappingType type) {
             if (it != ipv4TcpMappings_.end()) {
                 ipv4TcpMappings_.erase(it);
                 removed = true;
-                qDebug().noquote() << "删除IPv4 TCP映射:" << QString::fromStdString(key);
+                // qDebug().noquote() << "删除IPv4 TCP映射:" << QString::fromStdString(key);
             }
         }
         break;
@@ -147,7 +147,7 @@ bool EndpointMapper::removeMapping(const std::string& key, MappingType type) {
             if (it != ipv6TcpMappings_.end()) {
                 ipv6TcpMappings_.erase(it);
                 removed = true;
-                qDebug().noquote() << "删除IPv6 TCP映射:" << QString::fromStdString(key);
+                // qDebug().noquote() << "删除IPv6 TCP映射:" << QString::fromStdString(key);
             }
         }
         break;

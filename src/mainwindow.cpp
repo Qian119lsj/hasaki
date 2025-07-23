@@ -32,6 +32,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     udpSessionManager_ = hasaki::UdpSessionManager::getInstance();
 
     // 设置组件关系
+    udpSessionManager_->setPortProcessMonitor(portProcessMonitor_);
     packetForwarder_->setPortProcessMonitor(portProcessMonitor_);
     proxyServer_->setAdapterIpMap(adapterIpMap_);
     udpPacketInjector_ = new hasaki::UdpPacketInjector();
@@ -67,16 +68,12 @@ MainWindow::~MainWindow() {
     stopForwarding();
     portProcessMonitor_->stopMonitoring();
     
-    // 关闭延迟删除管理器
-    DelayedDeleteManager::getInstance()->stop();
     
     // 停止定时器
     udpSessionUpdateTimer_->stop();
     
     delete packetForwarder_;
     delete proxyServer_;
-    // 不需要删除单例对象
-    // delete udpSessionManager_;
     delete ui;
 }
 
@@ -290,6 +287,8 @@ void MainWindow::stopForwarding() {
     }
     proxyServer_->stop();
     packetForwarder_->stop();
+    DelayedDeleteManager::getInstance()->clearAllTasks();
+    endpointMapper_->clearAllMappings();
 
     is_running_ = false;
     ui->startButton->setEnabled(true);

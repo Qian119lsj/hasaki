@@ -21,7 +21,7 @@ TcpSessionManager::~TcpSessionManager() {}
 
 std::shared_ptr<TcpSession> TcpSessionManager::createSession(SOCKET client_socket, SOCKET target_socket, const std::string &key, MappingType mapping_type) {
     auto session = std::make_shared<TcpSession>(client_socket, target_socket, key, mapping_type);
-    
+
     std::lock_guard<std::mutex> lock(sessions_mutex_);
     if (sessions_.count(client_socket)) {
         // A session for this socket already exists, which indicates a logical error.
@@ -35,24 +35,23 @@ std::shared_ptr<TcpSession> TcpSessionManager::createSession(SOCKET client_socke
 }
 
 void TcpSessionManager::closeSession(SOCKET client_socket) {
-    std::shared_ptr<TcpSession> session_to_close;
     {
         std::lock_guard<std::mutex> lock(sessions_mutex_);
         auto it = sessions_.find(client_socket);
         if (it != sessions_.end()) {
-            session_to_close = it->second;
+
+            if (it->second->client_socket != INVALID_SOCKET) {
+                closesocket(it->second->client_socket);
+                it->second->client_socket = INVALID_SOCKET;
+            }
+            if (it->second->target_socket != INVALID_SOCKET) {
+                closesocket(it->second->target_socket);
+                it->second->target_socket = INVALID_SOCKET;
+            }
+            createDelayedRemover(it->second->mapper_key_, it->second->mapping_type_);
+
             sessions_.erase(it); // 从map中移除
         }
-    }
-
-    if (session_to_close) {
-        if (session_to_close->client_socket != INVALID_SOCKET) {
-            closesocket(session_to_close->client_socket);
-        }
-        if (session_to_close->target_socket != INVALID_SOCKET) {
-            closesocket(session_to_close->target_socket);
-        }
-        createDelayedRemover(session_to_close->mapper_key_, session_to_close->mapping_type_);
     }
 }
 

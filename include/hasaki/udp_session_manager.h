@@ -9,6 +9,8 @@
 #include <atomic>
 #include "hasaki/proxy_server.h"
 
+class PortProcessMonitor;
+
 namespace hasaki {
 
 // UDP会话结构体
@@ -51,6 +53,8 @@ public:
     
     ~UdpSessionManager();
 
+    void setPortProcessMonitor(PortProcessMonitor *monitor);
+
     void start();
     // 关闭会话管理器
     void shutdown();
@@ -84,6 +88,9 @@ private:
 
     std::thread cleanup_thread_;
     std::atomic<bool> running_;
+
+    // 端口进程监视器
+    PortProcessMonitor* portProcessMonitor_ = nullptr;
 };
 
 } // namespace hasaki

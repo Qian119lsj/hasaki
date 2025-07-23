@@ -16,6 +16,7 @@ PacketForwarder::PacketForwarder() {
 PacketForwarder::~PacketForwarder() { stop(); }
 
 void PacketForwarder::setProxyServer(ProxyServer *proxyServer) { proxyServer_ = proxyServer; }
+void PacketForwarder::setPortProcessMonitor(PortProcessMonitor *monitor) { portProcessMonitor_ = monitor; }
 
 void PacketForwarder::setEnableIpv6(bool enable) {
     enable_ipv6_ = enable;
@@ -50,14 +51,8 @@ void PacketForwarder::stop() {
         }
         net_thread_.join();
     }
-
-    // 清理所有映射
-    if (endpointMapper_ != nullptr) {
-        endpointMapper_->clearAllMappings();
-    }
 }
 
-void PacketForwarder::setPortProcessMonitor(PortProcessMonitor *monitor) { portProcessMonitor_ = monitor; }
 
 void PacketForwarder::net_thread_func(std::stop_token st) {
     uint16_t proxy_port = proxyServer_->getPort();

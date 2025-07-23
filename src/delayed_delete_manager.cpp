@@ -54,9 +54,15 @@ void DelayedDeleteManager::stop() {
         if (worker_.joinable()) {
             worker_.join();
         }
+        clearAllTasks();
 
         qDebug() << "延迟删除管理器已停止";
     }
+}
+
+void DelayedDeleteManager::clearAllTasks() {
+    std::lock_guard<std::mutex> lock(taskMutex_);
+    tasks_.clear();
 }
 
 void DelayedDeleteManager::workerThread() {

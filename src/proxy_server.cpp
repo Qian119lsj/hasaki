@@ -33,7 +33,7 @@ void ProxyServer::setAdapterIpMap(const QMap<QString, int> &adapter_ip_map) { ad
 void ProxyServer::setUdpPacketInjector(hasaki::UdpPacketInjector *udp_packet_injector) { udp_packet_injector_ = udp_packet_injector; }
 
 bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
-    
+
     udp_session_manager_->start();
 
     if (socks5_address_.empty() || socks5_port_ == 0) {
@@ -217,7 +217,10 @@ void ProxyServer::worker_thread_func() {
             if (io_context == nullptr) {
                 qDebug() << "io_context is nullptr, error code: " << dwError;
             } else {
-                qDebug() << "GetQueuedCompletionStatus 失败，错误码：" << dwError << ",operation" << io_context->operation;
+                if (dwError == ERROR_CONNECTION_ABORTED && io_context->operation == IO_RECV_TCP) { // The network connection was aborted by the local system
+                } else {
+                    qDebug() << "GetQueuedCompletionStatus 失败，错误码：" << dwError << ",operation" << io_context->operation;
+                }
                 if (io_context->operation == IO_RECV_TCP || io_context->operation == IO_SEND_TCP) { // tcp
                     delete io_context;
                 } else if (io_context->operation == IO_ACCEPT) {
@@ -236,7 +239,7 @@ void ProxyServer::worker_thread_func() {
 
             if (!is_running_ || (bytes_transferred == 0 && io_context->operation != IO_ACCEPT)) {
 
-                if (bytes_transferred == 0) {
+                if (bytes_transferred == 0 && io_context->operation != IO_RECV_TCP) {
                     qDebug() << "GetQueuedCompletionStatus success, but bytes_transferred is 0, operation: " << io_context->operation;
                 }
 
@@ -417,7 +420,7 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
             // 发送数据
             if (WSASend(send_context->socket, &send_context->wsa_buf, 1, nullptr, 0, &send_context->overlapped, nullptr) == SOCKET_ERROR) {
                 if (WSAGetLastError() != WSA_IO_PENDING) {
-                    qDebug() << "WSASend失败: " << WSAGetLastError();
+                    qDebug() << "WSASend失败: " << WSAGetLastError() << " socket_type: " << io_context->socket_type;
                     delete send_context;
                     if (io_context->socket_type == CLIENT_SOCKET) {
                         tcp_session_manager_->closeSession(io_context->socket);
@@ -438,7 +441,7 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
         if (WSARecv(io_context->socket, &io_context->wsa_buf, 1, nullptr, &flags, &io_context->overlapped, nullptr) == SOCKET_ERROR) {
             int wsaError = WSAGetLastError();
             if (wsaError != WSA_IO_PENDING) {
-                qDebug() << "WSARecv失败: " << wsaError;
+                qDebug() << "WSARecv失败: " << wsaError << " socket_type: " << io_context->socket_type;
                 if (io_context->socket_type == CLIENT_SOCKET) {
                     tcp_session_manager_->closeSession(io_context->socket);
                 } else if (io_context->socket_type == TARGET_SOCKET) {
@@ -725,6 +728,7 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
         if (CreateIoCompletionPort((HANDLE)session->local_socket, iocp_handle_, 0, 0) == nullptr) {
             qDebug() << "关联UDP套接字到IOCP失败: " << GetLastError();
             closesocket(session->local_socket);
+            session->local_socket = INVALID_SOCKET;
             return false;
         }
 
