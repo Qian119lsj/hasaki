@@ -29,13 +29,13 @@ DelayedDeleteManager *DelayedDeleteManager::getInstance() {
     return instance_.get();
 }
 
-void DelayedDeleteManager::addTask(const std::string &key, MappingType type, uint64_t delayMs) {
+void DelayedDeleteManager::addTask(std::string key, MappingType type, uint64_t delayMs) {
     // 计算删除时间点
     uint64_t deleteTime = getCurrentTimeMs() + delayMs;
 
     {
         std::lock_guard<std::mutex> lock(taskMutex_);
-        tasks_.emplace_back(key, type, deleteTime);
+        tasks_.emplace_back(std::move(key), type, deleteTime);
     }
 
     // 通知工作线程有新任务

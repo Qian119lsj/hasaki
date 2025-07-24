@@ -4,6 +4,7 @@
 #include "hasaki/socks5serverdialog.h"
 #include "hasaki/udptestdialog.h"
 #include "hasaki/delayed_delete_manager.h"
+#include "hasaki/tcp_session_manager.h"
 #include "ui_mainwindow.h"
 
 #include <QHeaderView>
@@ -56,6 +57,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     udpSessionUpdateTimer_ = new QTimer(this);
     connect(udpSessionUpdateTimer_, &QTimer::timeout, this, &MainWindow::updateUdpSessionView);
     udpSessionUpdateTimer_->start(2000); // 每2秒更新一次
+    
+    // 初始化会话状态更新定时器
+    sessionCountUpdateTimer_ = new QTimer(this);
+    connect(sessionCountUpdateTimer_, &QTimer::timeout, this, &MainWindow::updateSessionStatusBar);
+    sessionCountUpdateTimer_->start(1000); // 每秒更新一次
+    
+    // 创建状态栏标签
+    sessionStatusLabel_ = new QLabel(this);
+    sessionStatusLabel_->setAlignment(Qt::AlignRight);
+    sessionStatusLabel_->setMinimumWidth(200);
+    ui->statusbar->addPermanentWidget(sessionStatusLabel_);
+    
+    // 初始更新一次状态栏
+    updateSessionStatusBar();
 
     ui->startButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
@@ -71,6 +86,7 @@ MainWindow::~MainWindow() {
     
     // 停止定时器
     udpSessionUpdateTimer_->stop();
+    sessionCountUpdateTimer_->stop();
     
     delete packetForwarder_;
     delete proxyServer_;
@@ -180,6 +196,15 @@ void MainWindow::updateMappingsView() {
     // 此方法保留但不再使用，改为使用updateUdpSessionView
 }
 
+void MainWindow::updateSessionStatusBar() {
+    // 获取当前TCP和UDP会话数
+    size_t tcpSessions = hasaki::TcpSessionManager::getInstance()->getSessionCount();
+    size_t udpSessions = udpSessionManager_->getSessions().size();
+    
+    // 更新状态栏标签
+    sessionStatusLabel_->setText(QString("TCP会话: %1 | UDP会话: %2").arg(tcpSessions).arg(udpSessions));
+}
+
 void MainWindow::updateUdpSessionView() {
     // 保存当前排序状态
     int currentSortColumn = ui->mappingsTableWidget->horizontalHeader()->sortIndicatorSection();
@@ -225,9 +250,6 @@ void MainWindow::updateUdpSessionView() {
     if (ui->mappingsTableWidget->rowCount() > 0) {
         ui->mappingsTableWidget->sortItems(currentSortColumn, currentSortOrder);
     }
-    
-    // 更新状态栏显示会话数
-    ui->statusbar->showMessage(QString("当前UDP会话数: %1").arg(sessions.size()), 2000);
 }
 
 void MainWindow::startForwarding() {
@@ -256,7 +278,7 @@ void MainWindow::startForwarding() {
     QString socks5Address = socks5Info.first;
     int socks5Port = socks5Info.second;
     proxyServer_->setSocks5Server(socks5Address.toStdString(), static_cast<uint16_t>(socks5Port));
-    if (!proxyServer_->start(proxyPort, 14)) {
+    if (!proxyServer_->start(proxyPort, 12)) {
         ui->statusbar->showMessage("错误: 启动代理服务器失败", 5000);
         packetForwarder_->stop();
         return;
@@ -275,10 +297,11 @@ void MainWindow::startForwarding() {
     ui->socks5ServerComboBox->setEnabled(false); // 启动后禁用SOCKS5服务器选择
     ui->editServerButton->setEnabled(false); // 启动后禁用编辑按钮
     ui->deleteServerButton->setEnabled(false); // 启动后禁用删除按钮
-    ui->statusbar->showMessage("服务运行中...", 0);
+    ui->statusbar->showMessage("服务运行中");
     
-    // 启动后立即更新一次UDP会话表格
+    // 启动后立即更新一次UDP会话表格和状态栏
     updateUdpSessionView();
+    updateSessionStatusBar();
 }
 
 void MainWindow::stopForwarding() {
@@ -296,10 +319,10 @@ void MainWindow::stopForwarding() {
     ui->socks5ServerComboBox->setEnabled(true); // 停止后启用SOCKS5服务器选择
     ui->editServerButton->setEnabled(true); // 停止后启用编辑按钮
     ui->deleteServerButton->setEnabled(true); // 停止后启用删除按钮
-    ui->statusbar->showMessage("服务已停止", 5000);
+    ui->statusbar->showMessage("服务已停止");
     
-    // 停止后立即更新一次UDP会话表格，清空表格
-    updateUdpSessionView();
+    // 停止后更新状态栏
+    updateSessionStatusBar();
 }
 
 void MainWindow::on_startButton_clicked() { startForwarding(); }

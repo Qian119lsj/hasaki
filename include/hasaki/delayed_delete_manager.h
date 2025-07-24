@@ -23,7 +23,7 @@ public:
     static DelayedDeleteManager* getInstance();
 
     // 添加延迟删除任务
-    void addTask(const std::string& key, MappingType type, uint64_t delayMs = 130000);
+    void addTask(std::string key, MappingType type, uint64_t delayMs = 130000);
 
     // 停止管理器
     void stop();

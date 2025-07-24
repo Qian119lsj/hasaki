@@ -3,6 +3,7 @@
 #include <QtNetwork/QHostAddress>
 #include <filesystem>
 #include <iostream>
+#include <chrono>
 
 PortProcessMonitor::PortProcessMonitor(QObject *parent) : QObject(parent), m_handle(INVALID_HANDLE_VALUE) {}
 
@@ -95,16 +96,65 @@ QList<PortProcessInfo> PortProcessMonitor::getPortProcessList() const {
     QList<PortProcessInfo> list;
 
     for (auto it = m_portToProcessName.constBegin(); it != m_portToProcessName.constEnd(); ++it) {
-        list.append({it.key(), it.value()});
+        PortProcessInfo info;
+        info.port = it.key();
+        info.processName = it.value();
+        
+        // 检查是否已过期
+        if (m_portExpirationTime.contains(it.key())) {
+            info.isExpired = true;
+            info.expireTime = m_portExpirationTime.value(it.key());
+        }
+        
+        list.append(info);
     }
 
     return list;
 }
 
+uint64_t PortProcessMonitor::getCurrentTimeMs() const {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+void PortProcessMonitor::cleanupExpiredMappings() {
+    QMutexLocker locker(&m_mutex);
+    uint64_t now = getCurrentTimeMs();
+    
+    QList<quint16> portsToRemove;
+    for (auto it = m_portExpirationTime.begin(); it != m_portExpirationTime.end(); ++it) {
+        if (it.value() <= now) {
+            portsToRemove.append(it.key());
+        }
+    }
+    
+    bool mappingsUpdated = false;
+    for (quint16 port : portsToRemove) {
+        m_portToProcessName.remove(port);
+        m_portExpirationTime.remove(port);
+        // qDebug() << "remove port:" << port;
+        mappingsUpdated = true;
+    }
+    
+    if (mappingsUpdated) {
+        emit mappingsChanged();
+    }
+}
+
 void PortProcessMonitor::processEvents(std::stop_token stop_token) {
     WINDIVERT_ADDRESS addr;
-
+    
+    // 上次清理过期映射的时间
+    uint64_t lastCleanupTime = getCurrentTimeMs();
+    
     while (!stop_token.stop_requested()) {
+        // 每10秒检查一次过期映射
+        uint64_t currentTime = getCurrentTimeMs();
+        if (currentTime - lastCleanupTime > 10000) { // 10秒 = 10000毫秒
+            cleanupExpiredMappings();
+            lastCleanupTime = currentTime;
+        }
+        
         // 接收事件
         if (!WinDivertRecv(m_handle, NULL, 0, NULL, &addr)) {
             DWORD lastError = GetLastError();
@@ -152,16 +202,22 @@ void PortProcessMonitor::handleSocketEvent(WINDIVERT_ADDRESS *addr) {
                 }
 
                 m_portToProcessName.insert(localPort, processName);
+                // 如果端口在过期列表中,移除它
+                if (m_portExpirationTime.contains(localPort)) {
+                    m_portExpirationTime.remove(localPort);
+                }
                 mappingsUpdated = true;
 
                 // qDebug() << "Port BOUND:" << localPort << "by process" << processName << "(" << socketData->ProcessId << ")";
             }
         } else if (addr->Event == WINDIVERT_EVENT_SOCKET_CLOSE) {
             if (m_portToProcessName.contains(localPort)) {
-                m_portToProcessName.remove(localPort);
+                // 不立即删除,而是标记为过期,设置300秒后删除
+                uint64_t expireTime = getCurrentTimeMs() + 300000;
+                m_portExpirationTime.insert(localPort, expireTime);
                 mappingsUpdated = true;
 
-                // qDebug() << "Port UNBOUND:" << localPort;
+                // qDebug() << "Port MARKED FOR EXPIRATION:" << localPort << "will be removed in 130 seconds";
             }
         }
     }

@@ -7,6 +7,7 @@
 #include "hasaki/endpoint_mapper.h"
 #include "hasaki/udp_session_manager.h"
 #include "hasaki/udp_packet_injector.h"
+#include "hasaki/tcp_session_manager.h"
 
 #include <QMainWindow>
 #include <QComboBox>
@@ -14,6 +15,8 @@
 #include <QPair>
 #include <QTimer>
 #include <QTableWidgetItem>
+#include <QStatusBar>
+#include <QLabel>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -56,6 +59,7 @@ private slots:
     void applySettings();
     void updateMappingsView();
     void updateUdpSessionView(); // 新增：更新UDP会话表格
+    void updateSessionStatusBar(); // 新增：更新状态栏会话数
     void on_startButton_clicked();
     void on_stopButton_clicked();
     void on_socks5ServerComboBox_currentIndexChanged(int index);
@@ -85,4 +89,10 @@ private:
     
     // 定时器，用于定期更新UDP会话表格
     QTimer* udpSessionUpdateTimer_;
+    
+    // 定时器，用于定期更新状态栏会话数
+    QTimer* sessionCountUpdateTimer_;
+    
+    // 状态栏标签
+    QLabel* sessionStatusLabel_;
 };

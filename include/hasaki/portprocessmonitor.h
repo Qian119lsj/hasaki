@@ -15,6 +15,8 @@
 struct PortProcessInfo {
     quint16 port;
     QString processName;
+    bool isExpired = false;  // 是否已过期
+    uint64_t expireTime = 0; // 过期时间戳(毫秒)
 };
 
 // RAII wrapper for HANDLE
@@ -69,6 +71,8 @@ private:
     void processEvents(std::stop_token stop_token);
     void handleSocketEvent(WINDIVERT_ADDRESS *addr);
     std::optional<std::wstring> getProcessNameByPid(DWORD pid) const;
+    uint64_t getCurrentTimeMs() const;
+    void cleanupExpiredMappings();
 
     mutable QMutex m_mutex;
     HANDLE m_handle;
@@ -78,5 +82,6 @@ private:
     QSet<QString> m_blacklistProcessNames;
     bool m_isBlacklistMode = false;
     QHash<quint16, QString> m_portToProcessName;
+    QHash<quint16, uint64_t> m_portExpirationTime; // 端口过期时间映射
     QSet<DWORD> m_blacklistedPids; // 进程ID黑名单, 用于忽略自身等
 };

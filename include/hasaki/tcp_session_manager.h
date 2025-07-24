@@ -35,9 +35,12 @@ public:
     std::shared_ptr<TcpSession> createSession(SOCKET client_socket, SOCKET target_socket, const std::string &key, MappingType mapping_type);
     void closeSession(SOCKET client_socket);
     void clearAllSessions();
+    
+    // 获取当前TCP会话数
+    size_t getSessionCount() const;
+    
 private:
     TcpSessionManager();
-    void createDelayedRemover(const std::string &key, MappingType type);
 
 private:
     std::mutex sessions_mutex_;

@@ -4,6 +4,9 @@
 
 #include <string>
 #include <WinSock2.h>
+#include <QDebug>
+#include <QThread>
+#include <QFileInfo>
 
 // 映射类型枚举
 enum class MappingType { IPV4_TCP, IPV6_TCP, IPV4_UDP, IPV6_UDP, UNKNOWN };
