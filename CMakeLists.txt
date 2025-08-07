@@ -73,7 +73,7 @@ if(WIN32)
     set(PLATFORM_SPECIFIC_FILES ${RC_FILE})
 endif()
 
-qt_add_executable(hasaki
+qt_add_executable(hasaki WIN32
     ${SOURCES}
     ${UIS}
     ${HEADERS}
