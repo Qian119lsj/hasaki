@@ -228,7 +228,9 @@ void ProxyServer::worker_thread_func() {
                              << "mapper_key:" << io_context->tcp_session.lock()->mapper_key_;
                     // 可以考虑重新创建IOCP
                 } else {
-                    qDebug() << "GetQueuedCompletionStatus 失败，错误码：" << dwError << ",operation" << io_context->operation;
+                    if (dwError != 995) {
+                        qDebug() << "GetQueuedCompletionStatus 失败，错误码：" << dwError << ",operation" << io_context->operation;
+                    }
                 }
 
                 if (io_context->operation == IO_RECV_TCP || io_context->operation == IO_SEND_TCP) { // tcp
