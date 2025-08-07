@@ -123,6 +123,7 @@ std::shared_ptr<UdpSession> UdpSessionManager::getOrCreateSession(const std::str
         sessions_[session_key] = session;
     }
 
+    // qDebug() << "创建UDP会话: " << session_key << " remote_ip: " << dest_ip << " remote_port: " << dest_port << " is_ipv6: " << is_ipv6;
     *is_new_session = true;
     return session;
 }

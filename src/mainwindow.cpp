@@ -35,7 +35,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     // 设置组件关系
     udpSessionManager_->setPortProcessMonitor(portProcessMonitor_);
     packetForwarder_->setPortProcessMonitor(portProcessMonitor_);
-    proxyServer_->setAdapterIpMap(adapterIpMap_);
     udpPacketInjector_ = new hasaki::UdpPacketInjector();
     proxyServer_->setUdpPacketInjector(udpPacketInjector_);
 
@@ -278,7 +277,7 @@ void MainWindow::startForwarding() {
     QString socks5Address = socks5Info.first;
     int socks5Port = socks5Info.second;
     proxyServer_->setSocks5Server(socks5Address.toStdString(), static_cast<uint16_t>(socks5Port));
-    if (!proxyServer_->start(proxyPort, 12)) {
+    if (!proxyServer_->start(proxyPort, 8)) {
         ui->statusbar->showMessage("错误: 启动代理服务器失败", 5000);
         packetForwarder_->stop();
         return;
@@ -286,6 +285,8 @@ void MainWindow::startForwarding() {
 
     udpPacketInjector_->initialize();
     packetForwarder_->setProxyServer(proxyServer_);
+    initializeAdapterIpMap();
+    proxyServer_->setAdapterIpMap(adapterIpMap_);
     if (!packetForwarder_->start()) {
         ui->statusbar->showMessage("错误: 启动包转发器失败", 5000);
         return;

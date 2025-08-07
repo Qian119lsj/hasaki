@@ -24,7 +24,8 @@ void PacketForwarder::setEnableIpv6(bool enable) {
 }
 
 bool PacketForwarder::start() {
-    net_handle_ = WinDivertOpen("outbound and (tcp or udp) and !impostor and remotePort!=5353 and (ip.DstAddr!=127.0.0.1 or ipv6.DstAddr!=::1)",
+    //  and !impostor
+    net_handle_ = WinDivertOpen("outbound and (tcp or udp) and remotePort!=5353 and remotePort!=1900 and remotePort!=5355 and remotePort!=3702 and remotePort!=137 and remotePort!=138 and remotePort!=67 and remotePort!=547 and (ip.DstAddr!=127.0.0.1 or ipv6.DstAddr!=::1)",
                                 WINDIVERT_LAYER_NETWORK, 0, 0);
     if (net_handle_ == INVALID_HANDLE_VALUE) {
         DWORD lastError = GetLastError();
@@ -133,10 +134,13 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
             }
 
             UINT packet_data_len_to_send = lenBeforeParse - remaining_packets_length; // 当前数据包长度=解析前剩余长度-解析后剩余长度
-            // qDebug() << "packet: srcAddrString: " << srcAddrString << ", dstAddrString: " << dstAddrString;
             if (tcpHdr != nullptr) {
                 UINT16 srcPort = WinDivertHelperNtohs(tcpHdr->SrcPort);
                 UINT16 dstPort = WinDivertHelperNtohs(tcpHdr->DstPort);
+                if ((srcPort < 1024 || dstPort < 1024) &&(dstPort!=53 && dstPort!=443 && dstPort!=80 && dstPort!=123)) {
+                    qDebug() << "addr.Impostor: " << addr.Impostor << "; src: " << srcAddrString << ":" << srcPort << " -> dst: " << dstAddrString << ":" << dstPort;
+                }
+                
                 if (addr.IPv6 == 1) {
                     if (srcPort == proxy_port) {
                         // 代理程序返回给客户端的数据 (IPv6)
@@ -220,6 +224,9 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                 UINT16 srcPort = WinDivertHelperNtohs(udpHdr->SrcPort);
                 UINT16 dstPort = WinDivertHelperNtohs(udpHdr->DstPort);
 
+                if ((srcPort < 1024 || dstPort < 1024) &&(dstPort!=53 && dstPort!=443 && dstPort!=80 && dstPort!=123)) {
+                    qDebug() << "addr.Impostor: " << addr.Impostor << "; src: " << srcAddrString << ":" << srcPort << " -> dst: " << dstAddrString << ":" << dstPort;
+                }
                 if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
                     if (enable_ipv6_ == false && addr.IPv6 == 1) {
                         continue;

@@ -62,8 +62,8 @@ uint16_t EndpointMapper::getOrCreateIpv4TcpMapping(UINT32 srcAddr, USHORT srcPor
         ipv4TcpMappings_.emplace(key, Ipv4EndpointPair{srcAddr, srcPort, dstAddr, dstPort});
     }
     
-    qDebug().noquote().nospace() << "创建IPv4 TCP映射: "<<key << " " << Utils::FormatIpv4Address(srcAddr) << ":" << WinDivertHelperNtohs(srcPort) 
-             << "->" << QString::fromStdString(dstAddrStr) << ":" << WinDivertHelperNtohs(dstPort);
+    // qDebug().noquote().nospace() << "创建IPv4 TCP映射: "<<key << " " << Utils::FormatIpv4Address(srcAddr) << ":" << WinDivertHelperNtohs(srcPort) 
+    //          << "->" << QString::fromStdString(dstAddrStr) << ":" << WinDivertHelperNtohs(dstPort);
     
     return pseudoPort;
 }
@@ -96,8 +96,8 @@ uint16_t EndpointMapper::getOrCreateIpv6TcpMapping(const UINT8* srcAddr, USHORT 
         ipv6TcpMappings_.emplace(key, pair);
     }
     
-    qDebug().noquote().nospace() << "创建IPv6 TCP映射: "<<key<<" [" << Utils::FormatIpv6Address((UINT32*)srcAddr) << "]:" << WinDivertHelperNtohs(srcPort) 
-             << "->[" << Utils::FormatIpv6Address((UINT32*)dstAddr) << "]:" << WinDivertHelperNtohs(dstPort);
+    // qDebug().noquote().nospace() << "创建IPv6 TCP映射: "<<key<<" [" << Utils::FormatIpv6Address((UINT32*)srcAddr) << "]:" << WinDivertHelperNtohs(srcPort) 
+    //          << "->[" << Utils::FormatIpv6Address((UINT32*)dstAddr) << "]:" << WinDivertHelperNtohs(dstPort);
     
     return pseudoPort;
 }

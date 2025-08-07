@@ -48,7 +48,7 @@ void TcpSessionManager::closeSession(SOCKET client_socket) {
             it->second->target_socket = INVALID_SOCKET;
         }
         DelayedDeleteManager::getInstance()->addTask(it->second->mapper_key_, it->second->mapping_type_);
-        qDebug() << "remove session map key:" << it->second->mapper_key_;
+        // qDebug() << "remove session map key:" << it->second->mapper_key_;
         sessions_.erase(it); // 从map中移除
     }
 }

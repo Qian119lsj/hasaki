@@ -221,9 +221,11 @@ void ProxyServer::worker_thread_func() {
             } else {
                 std::shared_ptr<hasaki::UdpSession> udp_session = std::move(io_context->udp_session);
 
-                if (dwError == ERROR_CONNECTION_ABORTED && io_context->operation == IO_RECV_TCP) { // The network connection was aborted by the local system
-                } else if (dwError == 121) {                                                       // ERROR_SEM_TIMEOUT
-                    qDebug() << "超时121. socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" << io_context->operation << "mapper_key:" << io_context->tcp_session.lock()->mapper_key_;
+                if (dwError == ERROR_CONNECTION_ABORTED &&
+                    (io_context->operation == IO_RECV_TCP || io_context->operation == IO_RECV_UDP)) { // The network connection was aborted by the local system
+                } else if (dwError == 121) {                                                          // ERROR_SEM_TIMEOUT
+                    qDebug() << "超时121. socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" << io_context->operation
+                             << "mapper_key:" << io_context->tcp_session.lock()->mapper_key_;
                     // 可以考虑重新创建IOCP
                 } else {
                     qDebug() << "GetQueuedCompletionStatus 失败，错误码：" << dwError << ",operation" << io_context->operation;
@@ -261,12 +263,14 @@ void ProxyServer::worker_thread_func() {
 
                 if (io_context->operation == IO_RECV_TCP || io_context->operation == IO_SEND_TCP) { // tcp
                     if (io_context->socket_type == CLIENT_SOCKET) {
-                        // qDebug() << "socket close, socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" << io_context->operation;
+                        // qDebug() << "socket close, socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" <<
+                        // io_context->operation;
                         if (io_context->socket != INVALID_SOCKET) {
                             tcp_session_manager_->closeSession(io_context->socket);
                         }
                     } else if (io_context->socket_type == TARGET_SOCKET) {
-                        // qDebug() << "socket close, socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" << io_context->operation;
+                        // qDebug() << "socket close, socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" <<
+                        // io_context->operation;
                         if (auto tcp_session = io_context->tcp_session.lock()) {
                             tcp_session_manager_->closeSession(tcp_session->client_socket);
                         }
@@ -469,22 +473,24 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
 
         // 继续接收
         DWORD flags = 0;
-        PerIOContext *new_io_context = new PerIOContext();
-        new_io_context->socket = io_context->socket;
-        new_io_context->operation = IO_RECV_TCP;
-        new_io_context->tcp_session = tcp_session;
-        new_io_context->socket_type = io_context->socket_type;
-        delete io_context;
-        if (WSARecv(new_io_context->socket, &new_io_context->wsa_buf, 1, nullptr, &flags, &new_io_context->overlapped, nullptr) == SOCKET_ERROR) {
+        io_context->reset();
+        // PerIOContext *new_io_context = new PerIOContext();
+        // new_io_context->socket = io_context->socket;
+        // new_io_context->operation = IO_RECV_TCP;
+        // new_io_context->tcp_session = tcp_session;
+        // new_io_context->socket_type = io_context->socket_type;
+        // delete io_context;
+        if (WSARecv(io_context->socket, &io_context->wsa_buf, 1, nullptr, &flags, &io_context->overlapped, nullptr) == SOCKET_ERROR) {
             int wsaError = WSAGetLastError();
             if (wsaError != WSA_IO_PENDING) {
-                qDebug() << "WSARecv失败: " << wsaError << " socket_type: " << new_io_context->socket_type;
-                if (new_io_context->socket_type == CLIENT_SOCKET) {
-                    tcp_session_manager_->closeSession(new_io_context->socket);
-                } else if (new_io_context->socket_type == TARGET_SOCKET) {
+                qDebug() << "WSARecv失败: " << wsaError << " socket_type: " << io_context->socket_type;
+                if (io_context->socket_type == CLIENT_SOCKET) {
+                    tcp_session_manager_->closeSession(io_context->socket);
+                } else if (io_context->socket_type == TARGET_SOCKET) {
                     tcp_session_manager_->closeSession(tcp_session->client_socket);
                 }
-                delete new_io_context;
+                // delete new_io_context;
+                delete io_context;
                 return false;
             }
         }
@@ -548,6 +554,7 @@ void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_ses
         qDebug() << "未找到接口映射: " << QString::fromStdString(udp_session->client_ip);
     }
 
+    // qDebug() << "发送伪造UDP数据包: " << QString::fromStdString(orig_dst_addr) << ":" << orig_dst_port << " -> " << QString::fromStdString(udp_session->client_ip) << ":" << udp_session->client_port;
     // 使用UDP包注入器发送数据包
     bool result = udp_packet_injector_->sendSpoofedPacket(orig_dst_addr,                  // 源IP (原始目标地址)
                                                           orig_dst_port,                  // 源端口 (原始目标端口)
@@ -757,7 +764,7 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
 
     if (is_new_session) {
         // 将UDP套接字关联到IOCP
-        qDebug() << "关联UDP套接字到IOCP";
+        // qDebug() << "关联UDP套接字到IOCP";
         if (CreateIoCompletionPort((HANDLE)session->local_socket, iocp_handle_, 0, 0) == nullptr) {
             qDebug() << "关联UDP套接字到IOCP失败: " << GetLastError();
             closesocket(session->local_socket);
