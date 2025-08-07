@@ -40,17 +40,19 @@ jobs:
       run: windeployqt --release build/${{env.BUILD_TYPE}}/hasaki.exe
 
     - name: Archive release files
+      shell: pwsh
       run: |
-        $ASSET_NAME="hasaki-${{ github.ref_name }}-windows.zip"
-        $ASSET_PATH="build/${{env.BUILD_TYPE}}"
-        7z a $ASSET_NAME $ASSET_PATH/*
+        $assetName = "hasaki-${{ github.ref_name }}-windows.zip"
+        $assetPath = "build/${{env.BUILD_TYPE}}"
+        7z a $assetName $assetPath/*
+        echo "ASSET_NAME=$assetName" >> $env:GITHUB_ENV
 
     - name: Create GitHub Release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v2
       with:
         body: ${{ github.event.release.body }}
-        files: hasaki-${{ github.ref_name }}-windows.zip
+        files: ${{ env.ASSET_NAME }}
         
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
