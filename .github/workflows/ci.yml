@@ -1,0 +1,65 @@
+# This starter workflow is for a CMake project running on a single platform. There is a different starter workflow if you need cross-platform coverage.
+# See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-multi-platform.yml
+name: Windows Qt6 CMake CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  QT_VERSION: 6.9.0
+  QT_HOST: windows
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Cache Qt
+      uses: actions/cache@v4
+      id: cache-qt
+      with:
+        path: ../Qt
+        key: qt-${{ runner.os }}-${{ env.QT_VERSION }}-x64
+        
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version:        ${{ env.QT_VERSION }}
+        aqtversion:     '==3.1.*'
+        host:           'windows'
+        target:         'desktop'
+        arch:           'win64_msvc2019_64'
+        cached:         ${{ steps.cache-qt.outputs.cache-hit }}
+
+    - name: Configure CMake
+      run: |
+        cmake -G Ninja `
+              -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} `
+              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
+              -B build `
+              -S .
+
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }}
+
+    - name: Package runtime files
+      run: |
+        cd build
+        cp ../third_party/windivert/lib/WinDivert.dll .
+        cp ../third_party/windivert/lib/WinDivert64.sys .
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: hasaki-windows
+        path: |
+          build/hasaki.exe
+          build/WinDivert.dll
+          build/WinDivert64.sys
