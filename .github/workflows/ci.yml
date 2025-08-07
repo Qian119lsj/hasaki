@@ -9,7 +9,7 @@ on:
     branches: [ "main" ]
 
 env:
-  QT_VERSION: 6.9.0
+  QT_VERSION: '6.5.3'
   QT_HOST: windows
   BUILD_TYPE: Release
 
