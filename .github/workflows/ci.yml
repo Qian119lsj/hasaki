@@ -7,7 +7,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-
+  release:
+    types: [created]
 env:
   QT_VERSION: '6.5.3'
   QT_HOST: windows
@@ -38,8 +39,21 @@ jobs:
     - name: Deploy Qt Dependencies
       run: windeployqt --release build/${{env.BUILD_TYPE}}/hasaki.exe
 
+    - name: Archive release files
+      run: |
+        $ASSET_NAME="hasaki-${{ github.ref_name }}-windows.zip"
+        $ASSET_PATH="build/${{env.BUILD_TYPE}}"
+        7z a $ASSET_NAME $ASSET_PATH/*
+
+    - name: Create GitHub Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v2
+      with:
+        body_path: ${{ github.event.release.body }}
+        files: hasaki-${{ github.ref_name }}-windows.zip
+        
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: hasaki-windows-build
+        name: hasaki-windows-build-raw
         path: build/${{env.BUILD_TYPE}}/
