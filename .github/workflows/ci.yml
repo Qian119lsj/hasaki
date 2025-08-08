@@ -10,7 +10,7 @@ on:
   release:
     types: [created]
 env:
-  QT_VERSION: '6.6.3'
+  QT_VERSION: '6.8.3'
   QT_HOST: windows
   BUILD_TYPE: Release
 
@@ -30,17 +30,15 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ${{ github.workspace }}/Qt 
-        key: ${{ runner.os }}-qt-${{ env.QT_VERSION }}-${{ 'win64_msvc2019_64' }}
+        key: 'install-qt-action'
 
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: ${{ env.QT_VERSION }}
-        arch: win64_msvc2019_64
-        # 关键点: 告诉 action 缓存是否命中
-        # 如果上一步 'cache-qt' 命中缓存，这里的值为 'true'
-        # action 在接收到 cached: 'true' 时，会跳过下载和安装，只设置环境变量
-        cached: ${{ steps.cache-qt.outputs.cache-hit }}
+        arch: win64_msvc2022_64
+        cache: true
+        cache-key-prefix: 'install-qt-action'
         
     - name: Configure CMake
       shell: bash
