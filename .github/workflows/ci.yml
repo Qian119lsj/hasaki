@@ -10,7 +10,7 @@ on:
   release:
     types: [created]
 env:
-  QT_VERSION: '6.5.3'
+  QT_VERSION: '6.6.3'
   QT_HOST: windows
   BUILD_TYPE: Release
 
