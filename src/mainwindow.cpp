@@ -5,6 +5,7 @@
 #include "hasaki/udptestdialog.h"
 #include "hasaki/delayed_delete_manager.h"
 #include "hasaki/tcp_session_manager.h"
+#include "hasaki/ConsoleManager.h"
 #include "ui_mainwindow.h"
 
 #include <QHeaderView>
@@ -38,9 +39,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     udpPacketInjector_ = new hasaki::UdpPacketInjector();
     proxyServer_->setUdpPacketInjector(udpPacketInjector_);
 
-    // 不再使用端口映射更新信号
-    // connect(portProcessMonitor_, &PortProcessMonitor::mappingsChanged, this, &MainWindow::updateMappingsView);
-
     // 设置初始状态
     portProcessMonitor_->setTargetProcessNames(appSettings_->getTargetProcessNames());
     portProcessMonitor_->setBlacklistProcessNames(appSettings_->getBlacklistProcessNames());
@@ -56,24 +54,24 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     udpSessionUpdateTimer_ = new QTimer(this);
     connect(udpSessionUpdateTimer_, &QTimer::timeout, this, &MainWindow::updateUdpSessionView);
     udpSessionUpdateTimer_->start(2000); // 每2秒更新一次
-    
+
     // 初始化会话状态更新定时器
     sessionCountUpdateTimer_ = new QTimer(this);
     connect(sessionCountUpdateTimer_, &QTimer::timeout, this, &MainWindow::updateSessionStatusBar);
     sessionCountUpdateTimer_->start(1000); // 每秒更新一次
-    
+
     // 创建状态栏标签
     sessionStatusLabel_ = new QLabel(this);
     sessionStatusLabel_->setAlignment(Qt::AlignRight);
     sessionStatusLabel_->setMinimumWidth(200);
     ui->statusbar->addPermanentWidget(sessionStatusLabel_);
-    
+
     // 初始更新一次状态栏
     updateSessionStatusBar();
 
     ui->startButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
-    
+
     // 初始更新一次UDP会话表格
     updateUdpSessionView();
 }
@@ -81,12 +79,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 MainWindow::~MainWindow() {
     stopForwarding();
     portProcessMonitor_->stopMonitoring();
-    
-    
+
     // 停止定时器
     udpSessionUpdateTimer_->stop();
     sessionCountUpdateTimer_->stop();
-    
+
     delete packetForwarder_;
     delete proxyServer_;
     delete ui;
@@ -128,22 +125,22 @@ void MainWindow::on_actionAddSocks5Server_triggered() {
 
 void MainWindow::updateSocks5ServerComboBox() {
     ui->socks5ServerComboBox->clear();
-    
+
     QList<Socks5Server> servers = appSettings_->getSocks5Servers();
     QString currentServer = appSettings_->getCurrentSocks5Server();
     int currentIndex = 0;
-    
+
     for (int i = 0; i < servers.size(); ++i) {
         ui->socks5ServerComboBox->addItem(servers[i].name);
         if (servers[i].name == currentServer) {
             currentIndex = i;
         }
     }
-    
+
     if (ui->socks5ServerComboBox->count() > 0) {
         ui->socks5ServerComboBox->setCurrentIndex(currentIndex);
     }
-    
+
     // 如果正在运行，禁用下拉框
     ui->socks5ServerComboBox->setEnabled(!is_running_);
     ui->editServerButton->setEnabled(!is_running_);
@@ -172,7 +169,7 @@ void MainWindow::applySettingsFromDialog(SettingsDialog *dialog) {
     portProcessMonitor_->setTargetProcessNames(dialog->getProcessNames());
     portProcessMonitor_->setBlacklistProcessNames(dialog->getBlacklistProcessNames());
     portProcessMonitor_->setBlacklistMode(dialog->isBlacklistEnabled());
-    
+
     // 应用IPv6设置到PacketForwarder
     packetForwarder_->setEnableIpv6(dialog->isIpv6Enabled());
 
@@ -191,15 +188,11 @@ void MainWindow::applySettings() {
     }
 }
 
-void MainWindow::updateMappingsView() {
-    // 此方法保留但不再使用，改为使用updateUdpSessionView
-}
-
 void MainWindow::updateSessionStatusBar() {
     // 获取当前TCP和UDP会话数
     size_t tcpSessions = hasaki::TcpSessionManager::getInstance()->getSessionCount();
     size_t udpSessions = udpSessionManager_->getSessions().size();
-    
+
     // 更新状态栏标签
     sessionStatusLabel_->setText(QString("TCP会话: %1 | UDP会话: %2").arg(tcpSessions).arg(udpSessions));
 }
@@ -208,43 +201,43 @@ void MainWindow::updateUdpSessionView() {
     // 保存当前排序状态
     int currentSortColumn = ui->mappingsTableWidget->horizontalHeader()->sortIndicatorSection();
     Qt::SortOrder currentSortOrder = ui->mappingsTableWidget->horizontalHeader()->sortIndicatorOrder();
-    
+
     ui->mappingsTableWidget->setRowCount(0); // 清空表格
-    
+
     // 获取UDP会话数据
     auto sessions = udpSessionManager_->getSessions();
-    
+
     ui->mappingsTableWidget->setSortingEnabled(false); // 更新时禁用排序
-    
+
     int row = 0;
     for (const auto &session_pair : sessions) {
         auto &session = session_pair.second;
-        
+
         ui->mappingsTableWidget->insertRow(row);
-        
+
         // 客户端IP
         ui->mappingsTableWidget->setItem(row, 0, new QTableWidgetItem(QString::fromStdString(session->client_ip)));
-        
+
         // 客户端端口
         QTableWidgetItem *clientPortItem = new QTableWidgetItem();
         clientPortItem->setData(Qt::DisplayRole, session->client_port);
         ui->mappingsTableWidget->setItem(row, 1, clientPortItem); // 客户端端口
-        
+
         // 最后活动时间
         auto now = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - session->last_activity_time).count();
         QString timeStr = QString("%1秒前").arg(elapsed);
-        
+
         TimeWidgetItem *timeItem = new TimeWidgetItem(timeStr);
         // 使用UserRole存储原始时间戳（秒数）用于排序
         timeItem->setData(Qt::UserRole, static_cast<qint64>(elapsed));
         ui->mappingsTableWidget->setItem(row, 2, timeItem);
-        
+
         row++;
     }
-    
+
     ui->mappingsTableWidget->setSortingEnabled(true); // 重新启用排序
-    
+
     // 恢复之前的排序状态
     if (ui->mappingsTableWidget->rowCount() > 0) {
         ui->mappingsTableWidget->sortItems(currentSortColumn, currentSortOrder);
@@ -266,7 +259,7 @@ void MainWindow::startForwarding() {
     portProcessMonitor_->setTargetProcessNames(targetProcesses);
     portProcessMonitor_->setBlacklistProcessNames(appSettings_->getBlacklistProcessNames());
     portProcessMonitor_->setBlacklistMode(appSettings_->isBlacklistEnabled());
-    
+
     // 设置IPv6状态
     packetForwarder_->setEnableIpv6(appSettings_->isIpv6Enabled());
 
@@ -296,10 +289,10 @@ void MainWindow::startForwarding() {
     ui->startButton->setEnabled(false);
     ui->stopButton->setEnabled(true);
     ui->socks5ServerComboBox->setEnabled(false); // 启动后禁用SOCKS5服务器选择
-    ui->editServerButton->setEnabled(false); // 启动后禁用编辑按钮
-    ui->deleteServerButton->setEnabled(false); // 启动后禁用删除按钮
+    ui->editServerButton->setEnabled(false);     // 启动后禁用编辑按钮
+    ui->deleteServerButton->setEnabled(false);   // 启动后禁用删除按钮
     ui->statusbar->showMessage("服务运行中");
-    
+
     // 启动后立即更新一次UDP会话表格和状态栏
     updateUdpSessionView();
     updateSessionStatusBar();
@@ -318,10 +311,10 @@ void MainWindow::stopForwarding() {
     ui->startButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
     ui->socks5ServerComboBox->setEnabled(true); // 停止后启用SOCKS5服务器选择
-    ui->editServerButton->setEnabled(true); // 停止后启用编辑按钮
-    ui->deleteServerButton->setEnabled(true); // 停止后启用删除按钮
+    ui->editServerButton->setEnabled(true);     // 停止后启用编辑按钮
+    ui->deleteServerButton->setEnabled(true);   // 停止后启用删除按钮
     ui->statusbar->showMessage("服务已停止");
-    
+
     // 停止后更新状态栏
     updateSessionStatusBar();
 }
@@ -334,43 +327,43 @@ void MainWindow::on_editServerButton_clicked() {
     if (ui->socks5ServerComboBox->count() == 0) {
         return;
     }
-    
+
     QString currentServerName = ui->socks5ServerComboBox->currentText();
     QList<Socks5Server> servers = appSettings_->getSocks5Servers();
-    
+
     // 查找当前选中的服务器
     Socks5Server currentServer;
     bool found = false;
-    for (const auto& server : servers) {
+    for (const auto &server : servers) {
         if (server.name == currentServerName) {
             currentServer = server;
             found = true;
             break;
         }
     }
-    
+
     if (!found) {
         return;
     }
-    
+
     // 创建编辑对话框
     Socks5ServerDialog dialog(this);
     dialog.setWindowTitle("编辑SOCKS5服务器");
     dialog.setServerName(currentServer.name);
     dialog.setServerAddress(currentServer.address);
     dialog.setServerPort(currentServer.port);
-    
+
     if (dialog.exec() == QDialog::Accepted) {
         QString newName = dialog.getServerName();
         QString address = dialog.getServerAddress();
         int port = dialog.getServerPort();
-        
+
         if (!newName.isEmpty() && !address.isEmpty() && port > 0) {
             // 如果名称改变了，需要先删除旧的服务器
             if (newName != currentServerName) {
                 appSettings_->removeSocks5Server(currentServerName);
             }
-            
+
             // 添加或更新服务器
             appSettings_->addSocks5Server(newName, address, port);
             appSettings_->setCurrentSocks5Server(newName);
@@ -384,19 +377,22 @@ void MainWindow::on_actionUdpTest_triggered() {
     dialog.exec();
 }
 
+void MainWindow::on_actionConsoleWindow_triggered() { 
+    ConsoleManager::toggle(); 
+    qDebug() << "Toggle Console button clicked. Current console window handle:" << GetConsoleWindow();
+}
+
 void MainWindow::on_deleteServerButton_clicked() {
     if (ui->socks5ServerComboBox->count() <= 1) {
         QMessageBox::warning(this, "警告", "至少需要保留一个SOCKS5服务器");
         return;
     }
-    
+
     QString currentServerName = ui->socks5ServerComboBox->currentText();
-    
+
     QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(this, "确认删除", 
-                                 QString("确定要删除服务器 '%1' 吗?").arg(currentServerName),
-                                 QMessageBox::Yes|QMessageBox::No);
-                                 
+    reply = QMessageBox::question(this, "确认删除", QString("确定要删除服务器 '%1' 吗?").arg(currentServerName), QMessageBox::Yes | QMessageBox::No);
+
     if (reply == QMessageBox::Yes) {
         appSettings_->removeSocks5Server(currentServerName);
         updateSocks5ServerComboBox();
@@ -405,28 +401,26 @@ void MainWindow::on_deleteServerButton_clicked() {
 
 void MainWindow::initializeAdapterIpMap() {
     adapterIpMap_.clear();
-    
+
     // 获取所有网络接口
     QList<QNetworkInterface> interfaces = QNetworkInterface::allInterfaces();
-    
+
     for (const QNetworkInterface &interface : interfaces) {
         // 跳过回环接口和不活动的接口
-        if (interface.flags().testFlag(QNetworkInterface::IsLoopBack) || 
-            !interface.flags().testFlag(QNetworkInterface::IsUp) ||
+        if (interface.flags().testFlag(QNetworkInterface::IsLoopBack) || !interface.flags().testFlag(QNetworkInterface::IsUp) ||
             !interface.flags().testFlag(QNetworkInterface::IsRunning)) {
             continue;
         }
-        
+
         // 获取接口的IPv4和IPv6地址
         QList<QNetworkAddressEntry> entries = interface.addressEntries();
         for (const QNetworkAddressEntry &entry : entries) {
             QHostAddress addr = entry.ip();
-            if (addr.protocol() == QAbstractSocket::IPv4Protocol || 
-                addr.protocol() == QAbstractSocket::IPv6Protocol) {
+            if (addr.protocol() == QAbstractSocket::IPv4Protocol || addr.protocol() == QAbstractSocket::IPv6Protocol) {
                 // 获取接口索引和IP地址
                 int ifIdx = interface.index();
                 QString addrStr = addr.toString();
-                
+
                 // 如果是IPv6地址，可能需要处理范围ID
                 if (addr.protocol() == QAbstractSocket::IPv6Protocol) {
                     // 移除IPv6地址中的范围ID部分（如果存在）
@@ -435,16 +429,13 @@ void MainWindow::initializeAdapterIpMap() {
                         addrStr = addrStr.left(scopeIdPos);
                     }
                 }
-                
+
                 // 存储映射（如果已存在相同IP地址，优先保留IPv4的映射）
-                if (!adapterIpMap_.contains(addrStr) || 
-                    addr.protocol() == QAbstractSocket::IPv4Protocol) {
+                if (!adapterIpMap_.contains(addrStr) || addr.protocol() == QAbstractSocket::IPv4Protocol) {
                     adapterIpMap_[addrStr] = ifIdx;
                 }
-                
-                qDebug() << "找到网络适配器:" << interface.name() 
-                         << "索引:" << ifIdx 
-                         << "IP:" << addrStr
+
+                qDebug() << "找到网络适配器:" << interface.name() << "索引:" << ifIdx << "IP:" << addrStr
                          << "类型:" << (addr.protocol() == QAbstractSocket::IPv4Protocol ? "IPv4" : "IPv6");
             }
         }

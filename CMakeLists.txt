@@ -30,6 +30,7 @@ set(SOURCES
     src/udptestdialog.cpp
     src/udp_session_manager.cpp
     src/tcp_session_manager.cpp
+    src/ConsoleManager.cpp
 )
 
 file(GLOB_RECURSE UIS "src/*.ui")
@@ -49,6 +50,7 @@ set(HEADERS
     include/hasaki/udptestdialog.h
     include/hasaki/udp_session_manager.h
     include/hasaki/tcp_session_manager.h
+    include/hasaki/ConsoleManager.h
 )
 
 # Windows资源文件和清单

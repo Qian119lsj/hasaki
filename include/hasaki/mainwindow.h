@@ -55,8 +55,8 @@ private slots:
     void on_actionSettings_triggered();
     void on_actionAddSocks5Server_triggered();
     void on_actionUdpTest_triggered();
+    void on_actionConsoleWindow_triggered();
     void applySettings();
-    void updateMappingsView();
     void updateUdpSessionView(); // 新增：更新UDP会话表格
     void updateSessionStatusBar(); // 新增：更新状态栏会话数
     void on_startButton_clicked();
