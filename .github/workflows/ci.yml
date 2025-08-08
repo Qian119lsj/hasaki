@@ -10,12 +10,15 @@ on:
   release:
     types: [created]
 env:
-  QT_VERSION: '6.5.3'
+  QT_VERSION: '6.8.3'
   QT_HOST: windows
   BUILD_TYPE: Release
 
 jobs:
   build:
+    permissions:
+      contents: write
+      
     runs-on: windows-latest
 
     steps:
@@ -23,34 +26,37 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: ${{ env.QT_VERSION }}
-        arch: win64_msvc2019_64
+        arch: win64_msvc2022_64
         cache: true
+        cache-key-prefix: 'install-qt-action'
         
     - name: Configure CMake
       shell: bash
       run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
-      run: cmake --build build --config ${{env.BUILD_TYPE}}
+      run: cmake --build build --config ${{env.BUILD_TYPE}} --parallel
       
     - name: Deploy Qt Dependencies
       run: windeployqt --release build/${{env.BUILD_TYPE}}/hasaki.exe
 
     - name: Archive release files
+      shell: pwsh
       run: |
-        $ASSET_NAME="hasaki-${{ github.ref_name }}-windows.zip"
-        $ASSET_PATH="build/${{env.BUILD_TYPE}}"
-        7z a $ASSET_NAME $ASSET_PATH/*
+        $assetName = "hasaki-${{ github.ref_name }}-windows.zip"
+        $assetPath = "build/${{env.BUILD_TYPE}}"
+        7z a $assetName $assetPath/*
+        echo "ASSET_NAME=$assetName" >> $env:GITHUB_ENV
 
     - name: Create GitHub Release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v2
       with:
-        body_path: ${{ github.event.release.body }}
-        files: hasaki-${{ github.ref_name }}-windows.zip
+        body: ${{ github.event.release.body }}
+        files: ${{ env.ASSET_NAME }}
         
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
