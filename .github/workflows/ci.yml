@@ -25,19 +25,29 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v4
       
+    - name: Cache Qt
+      id: cache-qt
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/Qt 
+        key: ${{ runner.os }}-qt-${{ env.QT_VERSION }}-${{ 'win64_msvc2019_64' }}
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: ${{ env.QT_VERSION }}
         arch: win64_msvc2019_64
-        cache: true
+        # 关键点: 告诉 action 缓存是否命中
+        # 如果上一步 'cache-qt' 命中缓存，这里的值为 'true'
+        # action 在接收到 cached: 'true' 时，会跳过下载和安装，只设置环境变量
+        cached: ${{ steps.cache-qt.outputs.cache-hit }}
         
     - name: Configure CMake
       shell: bash
       run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
-      run: cmake --build build --config ${{env.BUILD_TYPE}}
+      run: cmake --build build --config ${{env.BUILD_TYPE}} --parallel
       
     - name: Deploy Qt Dependencies
       run: windeployqt --release build/${{env.BUILD_TYPE}}/hasaki.exe
