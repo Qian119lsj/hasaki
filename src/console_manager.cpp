@@ -1,4 +1,4 @@
-#include "hasaki/ConsoleManager.h"
+#include "hasaki/console_manager.h"
 
 #include <windows.h>
 #include <cstdio>
@@ -8,7 +8,7 @@
 // 声明一个静态变量来持有控制台的句柄
 static HWND g_consoleHwnd = NULL;
 
-void ConsoleManager::show() {
+void console_manager::show() {
     // 如果句柄为空，说明控制台从未创建过
     if (g_consoleHwnd == NULL) {
         if (!AllocConsole()) {
@@ -39,14 +39,14 @@ void ConsoleManager::show() {
     ShowWindow(g_consoleHwnd, SW_SHOW);
 }
 
-void ConsoleManager::hide() {
+void console_manager::hide() {
     // 只在句柄有效时才隐藏
     if (g_consoleHwnd != NULL) {
         ShowWindow(g_consoleHwnd, SW_HIDE);
     }
 }
 
-void ConsoleManager::toggle() {
+void console_manager::toggle() {
     // 如果从未创建过，则直接显示
     if (g_consoleHwnd == NULL) {
         show();

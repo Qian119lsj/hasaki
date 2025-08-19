@@ -1,4 +1,4 @@
-#include "hasaki/appsettings.h"
+#include "hasaki/app_settings.h"
 
 #include <QCoreApplication>
 #include <QDebug>

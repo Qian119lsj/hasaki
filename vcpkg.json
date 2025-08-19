@@ -1,0 +1,7 @@
+{
+    "name": "hasaki",
+    "version-string": "0.0.1",
+    "dependencies": [
+    ],
+    "builtin-baseline": "903956eff7cb94774a9e805ff573c000afc43e3e"
+}

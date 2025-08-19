@@ -1,7 +1,7 @@
 #ifndef CONSOLEMANAGER_H
 #define CONSOLEMANAGER_H
 
-namespace ConsoleManager {
+namespace console_manager {
 
 /**
  * @brief 显示控制台窗口。
@@ -22,4 +22,4 @@ void toggle();
 
 }
 
-#endif // CONSOLEMANAGER_H
+#endif

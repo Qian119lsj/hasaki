@@ -5,7 +5,7 @@
 #include "hasaki/udptestdialog.h"
 #include "hasaki/delayed_delete_manager.h"
 #include "hasaki/tcp_session_manager.h"
-#include "hasaki/ConsoleManager.h"
+#include "hasaki/console_manager.h"
 #include "ui_mainwindow.h"
 
 #include <QHeaderView>
@@ -378,7 +378,7 @@ void MainWindow::on_actionUdpTest_triggered() {
 }
 
 void MainWindow::on_actionConsoleWindow_triggered() { 
-    ConsoleManager::toggle(); 
+    console_manager::toggle(); 
     qDebug() << "Toggle Console button clicked. Current console window handle:" << GetConsoleWindow();
 }
 

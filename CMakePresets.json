@@ -1,0 +1,133 @@
+{
+    "version": 4,
+    "configurePresets": [
+        {
+            "name": "base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_CXX_STANDARD": "20",
+                "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+                "CMAKE_PREFIX_PATH": "H:/Qt/6.9.0/msvc2022_64",
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+            }
+        },
+        {
+            "name": "windows-base",
+            "hidden": true,
+            "inherits": "base",
+            "environment": {
+                "VCPKG_ROOT": "H:/vcpkg"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "clang-base",
+            "hidden": true,
+            "inherits": "windows-base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": {
+                    "type": "FILEPATH",
+                    "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+                },
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": {
+                    "type": "FILEPATH",
+                    "value": "${sourceDir}/cmake/llvm.toolchain.cmake"
+                }
+            }
+        },
+        {
+            "name": "clang-debug",
+            "inherits": "clang-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "clang-release",
+            "inherits": "clang-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON"
+            }
+        },
+        {
+            "name": "msvc-base",
+            "hidden": true,
+            "inherits": "windows-base",
+            "generator": "Ninja",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": {
+                    "type": "FILEPATH",
+                    "value": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+                }
+            }
+        },
+        {
+            "name": "msvc-debug",
+            "inherits": "msvc-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "msvc-release",
+            "inherits": "msvc-base",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "msvc-debug-asan",
+            "inherits": "msvc-debug",
+            "binaryDir": "${sourceDir}/out/build/msvc-debug-asan",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "/Zi /Od /fsanitize=address /EHsc",
+                "CMAKE_C_FLAGS": "/Zi /Od /fsanitize=address"
+            }
+        },
+        {
+            "name": "clang-debug-asan",
+            "inherits": "clang-debug",
+            "binaryDir": "${sourceDir}/out/build/clang-debug-asan",
+            "cacheVariables": {
+                "CMAKE_CXX_FLAGS": "-g -O1 -fsanitize=address",
+                "CMAKE_C_FLAGS": "-g -O1 -fsanitize=address",
+                "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
+                "CMAKE_SHARED_LINKER_FLAGS_DEBUG": "-fsanitize=address"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "build-clang-debug",
+            "configurePreset": "clang-debug"
+        },
+        {
+            "name": "build-clang-release",
+            "configurePreset": "clang-release"
+        },
+        {
+            "name": "build-msvc-debug",
+            "configurePreset": "msvc-debug"
+        },
+        {
+            "name": "build-msvc-release",
+            "configurePreset": "msvc-release"
+        },
+        {
+            "name": "build-msvc-debug-asan",
+            "configurePreset": "msvc-debug-asan"
+        },
+        {
+            "name": "build-clang-debug-asan",
+            "configurePreset": "clang-debug-asan"
+        }
+    ]
+}
