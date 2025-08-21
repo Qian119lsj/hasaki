@@ -41,21 +41,12 @@ void customMessageHandler(QtMsgType type, const QMessageLogContext &context, con
     }
 }
 
-#ifdef Q_OS_WIN
-// 依赖清单触发 UAC，无需在运行时检测并弹窗
-#endif
-
 int main(int argc, char *argv[]) {
     qputenv("QT_QPA_PLATFORM", "windows:darkmode=0");
     qInstallMessageHandler(customMessageHandler);
 
     QApplication a(argc, argv);
     QCoreApplication::setApplicationName("hasaki");
-
-#ifdef Q_OS_WIN
-    // 通过应用程序清单 (src/hasaki.manifest) 的 requireAdministrator 自动触发 UAC
-#endif
-
     MainWindow w;
     w.show();
 

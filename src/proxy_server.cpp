@@ -225,8 +225,7 @@ void ProxyServer::worker_thread_func() {
                     (io_context->operation == IO_RECV_TCP || io_context->operation == IO_RECV_UDP)) { // The network connection was aborted by the local system
                 } else if (dwError == 121) {                                                          // ERROR_SEM_TIMEOUT
                     qDebug() << "超时121. socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" << io_context->operation
-                             << "mapper_key:" << io_context->tcp_session.lock()->mapper_key_;
-                    // 可以考虑重新创建IOCP
+                             << "mapper_key:" << io_context->tcp_session->mapper_key_;
                 } else {
                     if (dwError != 995) {
                         qDebug() << "GetQueuedCompletionStatus 失败，错误码：" << dwError << ",operation" << io_context->operation;
@@ -234,16 +233,7 @@ void ProxyServer::worker_thread_func() {
                 }
 
                 if (io_context->operation == IO_RECV_TCP || io_context->operation == IO_SEND_TCP) { // tcp
-                    if (io_context->socket_type == CLIENT_SOCKET) {
-                        tcp_session_manager_->closeSession(io_context->socket);
-
-                    } else if (io_context->socket_type == TARGET_SOCKET) {
-                        if (auto tcp_session = io_context->tcp_session.lock()) {
-                            if (tcp_session->client_socket != INVALID_SOCKET) {
-                                tcp_session_manager_->closeSession(tcp_session->client_socket);
-                            }
-                        }
-                    }
+                    tcp_session_manager_->removeSession(io_context->tcp_session->mapper_key_);
                     delete io_context;
                 } else if (io_context->operation == IO_ACCEPT) {
                     delete io_context;
@@ -264,19 +254,7 @@ void ProxyServer::worker_thread_func() {
             if (!is_running_ || (bytes_transferred == 0 && io_context->operation != IO_ACCEPT)) {
 
                 if (io_context->operation == IO_RECV_TCP || io_context->operation == IO_SEND_TCP) { // tcp
-                    if (io_context->socket_type == CLIENT_SOCKET) {
-                        // qDebug() << "socket close, socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" <<
-                        // io_context->operation;
-                        if (io_context->socket != INVALID_SOCKET) {
-                            tcp_session_manager_->closeSession(io_context->socket);
-                        }
-                    } else if (io_context->socket_type == TARGET_SOCKET) {
-                        // qDebug() << "socket close, socket:" << io_context->socket << "socket_type:" << io_context->socket_type << "operation:" <<
-                        // io_context->operation;
-                        if (auto tcp_session = io_context->tcp_session.lock()) {
-                            tcp_session_manager_->closeSession(tcp_session->client_socket);
-                        }
-                    }
+                    tcp_session_manager_->removeSession(io_context->tcp_session->mapper_key_);
                     delete io_context;
                 }
                 continue;
@@ -406,7 +384,7 @@ bool ProxyServer::handle_tcp_accept(PerIOContext *io_context) {
             qDebug() << "为客户端投递WSARecv失败: " << WSAGetLastError();
             delete client_io_context;
             delete target_io_context;
-            tcp_session_manager_->closeSession(client_socket);
+            tcp_session_manager_->removeSession(mapper_key);
             if (is_running_) {
                 post_tcp_accept(tcp_listen_socket_, new PerIOContext());
             }
@@ -417,7 +395,7 @@ bool ProxyServer::handle_tcp_accept(PerIOContext *io_context) {
     if (WSARecv(target_io_context->socket, &target_io_context->wsa_buf, 1, nullptr, &flags, &target_io_context->overlapped, nullptr) == SOCKET_ERROR) {
         if (WSAGetLastError() != WSA_IO_PENDING) {
             qDebug() << "为目标投递WSARecv失败: " << WSAGetLastError();
-            tcp_session_manager_->closeSession(client_socket);
+            tcp_session_manager_->removeSession(mapper_key);
             delete target_io_context;
             if (is_running_) {
                 post_tcp_accept(tcp_listen_socket_, new PerIOContext());
@@ -435,75 +413,47 @@ bool ProxyServer::handle_tcp_accept(PerIOContext *io_context) {
 }
 
 bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_transferred) {
+    auto tcp_session = io_context->tcp_session;
+    SOCKET peer_socket = (io_context->socket_type == CLIENT_SOCKET) ? tcp_session->target_socket : tcp_session->client_socket;
 
-    if (auto tcp_session = io_context->tcp_session.lock()) {
-        SOCKET peer_socket = (io_context->socket_type == CLIENT_SOCKET) ? tcp_session->target_socket : tcp_session->client_socket;
-
-        // 创建发送上下文
-        PerIOContext *send_context = new PerIOContext();
-        send_context->socket = peer_socket;
-        send_context->operation = IO_SEND_TCP;
-        send_context->tcp_session = tcp_session;
-        send_context->socket_type = io_context->socket_type == CLIENT_SOCKET ? TARGET_SOCKET : CLIENT_SOCKET;
-
-        // 复制数据
-        memcpy(send_context->buffer, io_context->buffer, bytes_transferred);
-        send_context->wsa_buf.len = bytes_transferred;
-
-        // 检查对端套接字是否有效
-        if (peer_socket == INVALID_SOCKET) {
-            qDebug() << "对端套接字无效";
-            delete send_context;
-            delete io_context;
-            return false;
-        } else {
-            // 发送数据
-            if (WSASend(send_context->socket, &send_context->wsa_buf, 1, nullptr, 0, &send_context->overlapped, nullptr) == SOCKET_ERROR) {
-                if (WSAGetLastError() != WSA_IO_PENDING) {
-                    qDebug() << "WSASend失败: " << WSAGetLastError() << " socket_type: " << io_context->socket_type;
-                    delete send_context;
-                    if (io_context->socket_type == CLIENT_SOCKET) {
-                        tcp_session_manager_->closeSession(io_context->socket);
-                    } else if (io_context->socket_type == TARGET_SOCKET) {
-                        tcp_session_manager_->closeSession(tcp_session->client_socket);
-                    }
-                    delete io_context;
-                    return false;
-                }
-            }
-        }
-
-        // 继续接收
-        DWORD flags = 0;
-        io_context->reset();
-        // PerIOContext *new_io_context = new PerIOContext();
-        // new_io_context->socket = io_context->socket;
-        // new_io_context->operation = IO_RECV_TCP;
-        // new_io_context->tcp_session = tcp_session;
-        // new_io_context->socket_type = io_context->socket_type;
-        // delete io_context;
-        if (WSARecv(io_context->socket, &io_context->wsa_buf, 1, nullptr, &flags, &io_context->overlapped, nullptr) == SOCKET_ERROR) {
-            int wsaError = WSAGetLastError();
-            if (wsaError != WSA_IO_PENDING) {
-                qDebug() << "WSARecv失败: " << wsaError << " socket_type: " << io_context->socket_type;
-                if (io_context->socket_type == CLIENT_SOCKET) {
-                    tcp_session_manager_->closeSession(io_context->socket);
-                } else if (io_context->socket_type == TARGET_SOCKET) {
-                    tcp_session_manager_->closeSession(tcp_session->client_socket);
-                }
-                // delete new_io_context;
-                delete io_context;
-                return false;
-            }
-        }
-
-    } else {
-        // 没有会话，无法继续
-        qDebug() << "没有会话，无法继续";
+    if (peer_socket == INVALID_SOCKET) {
+        qDebug() << "对端套接字无效";
         delete io_context;
         return false;
     }
+    // 创建发送上下文
+    PerIOContext *send_context = new PerIOContext();
+    send_context->socket = peer_socket;
+    send_context->operation = IO_SEND_TCP;
+    send_context->tcp_session = tcp_session;
 
+    // 复制数据
+    memcpy(send_context->buffer, io_context->buffer, bytes_transferred);
+    send_context->wsa_buf.len = bytes_transferred;
+
+    // 发送数据
+    if (WSASend(send_context->socket, &send_context->wsa_buf, 1, nullptr, 0, &send_context->overlapped, nullptr) == SOCKET_ERROR) {
+        if (WSAGetLastError() != WSA_IO_PENDING) {
+            qDebug() << "WSASend失败: " << WSAGetLastError() << " socket_type: " << io_context->socket_type;
+            delete send_context;
+            delete io_context;
+            tcp_session_manager_->removeSession(tcp_session->mapper_key_);
+            return false;
+        }
+    }
+
+    // 继续接收
+    DWORD flags = 0;
+    io_context->reset();
+    if (WSARecv(io_context->socket, &io_context->wsa_buf, 1, nullptr, &flags, &io_context->overlapped, nullptr) == SOCKET_ERROR) {
+        int wsaError = WSAGetLastError();
+        if (wsaError != WSA_IO_PENDING) {
+            qDebug() << "WSARecv失败: " << wsaError << " socket_type: " << io_context->socket_type;
+            delete io_context;
+            tcp_session_manager_->removeSession(tcp_session->mapper_key_);
+            return false;
+        }
+    }
     return true;
 }
 
@@ -556,8 +506,8 @@ void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_ses
         qDebug() << "未找到接口映射: " << QString::fromStdString(udp_session->client_ip);
     }
 
-    // qDebug() << "发送伪造UDP数据包: " << QString::fromStdString(orig_dst_addr) << ":" << orig_dst_port << " -> " << QString::fromStdString(udp_session->client_ip) << ":" << udp_session->client_port;
-    // 使用UDP包注入器发送数据包
+    // qDebug() << "发送伪造UDP数据包: " << QString::fromStdString(orig_dst_addr) << ":" << orig_dst_port << " -> " <<
+    // QString::fromStdString(udp_session->client_ip) << ":" << udp_session->client_port; 使用UDP包注入器发送数据包
     bool result = udp_packet_injector_->sendSpoofedPacket(orig_dst_addr,                  // 源IP (原始目标地址)
                                                           orig_dst_port,                  // 源端口 (原始目标端口)
                                                           udp_session->client_ip,         // 目标IP (客户端IP)

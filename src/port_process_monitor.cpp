@@ -41,10 +41,6 @@ void PortProcessMonitor::stopMonitoring() {
     // 请求线程停止
     if (m_thread.joinable()) {
         m_thread.request_stop();
-        // It's better to not join here if stopMonitoring can be called from the UI thread
-        // to avoid blocking. The jthread destructor will join. Or manage lifetime carefully.
-        // For now, let's keep it for simplicity.
-        m_thread.join();
     }
 
     // 关闭WinDivert句柄
@@ -89,27 +85,6 @@ bool PortProcessMonitor::isPortInTargetProcess(quint16 port) const {
     
     // 最终是否转发，总是由TargetProcessNames决定
     return m_targetProcessNames.contains(processName);
-}
-
-QList<PortProcessInfo> PortProcessMonitor::getPortProcessList() const {
-    QMutexLocker locker(&m_mutex);
-    QList<PortProcessInfo> list;
-
-    for (auto it = m_portToProcessName.constBegin(); it != m_portToProcessName.constEnd(); ++it) {
-        PortProcessInfo info;
-        info.port = it.key();
-        info.processName = it.value();
-        
-        // 检查是否已过期
-        if (m_portExpirationTime.contains(it.key())) {
-            info.isExpired = true;
-            info.expireTime = m_portExpirationTime.value(it.key());
-        }
-        
-        list.append(info);
-    }
-
-    return list;
 }
 
 uint64_t PortProcessMonitor::getCurrentTimeMs() const {
@@ -212,12 +187,16 @@ void PortProcessMonitor::handleSocketEvent(WINDIVERT_ADDRESS *addr) {
             }
         } else if (addr->Event == WINDIVERT_EVENT_SOCKET_CLOSE) {
             if (m_portToProcessName.contains(localPort)) {
-                // 不立即删除,而是标记为过期,设置300秒后删除
-                uint64_t expireTime = getCurrentTimeMs() + 300000;
-                m_portExpirationTime.insert(localPort, expireTime);
+                if(socketData->Protocol == 6) {
+                    // 不立即删除,而是标记为过期,设置250秒后删除
+                    uint64_t expireTime = getCurrentTimeMs() + 250000;
+                    m_portExpirationTime.insert(localPort, expireTime);
+                }else {
+                    // UDP直接删除
+                    m_portToProcessName.remove(localPort);
+                    m_portExpirationTime.remove(localPort);
+                }
                 mappingsUpdated = true;
-
-                // qDebug() << "Port MARKED FOR EXPIRATION:" << localPort << "will be removed in 130 seconds";
             }
         }
     }

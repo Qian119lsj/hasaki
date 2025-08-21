@@ -2,6 +2,7 @@
 #include "hasaki/delayed_delete_manager.h"
 #include "hasaki/utils.h"
 #include <QDebug>
+#include <algorithm>
 
 namespace hasaki {
 
@@ -20,36 +21,27 @@ TcpSessionManager::TcpSessionManager() {}
 
 TcpSessionManager::~TcpSessionManager() {}
 
-std::shared_ptr<TcpSession> TcpSessionManager::createSession(SOCKET client_socket, SOCKET target_socket, const std::string &key, MappingType mapping_type) {
-    auto session = std::make_shared<TcpSession>(client_socket, target_socket, key, mapping_type);
+std::shared_ptr<TcpSession> TcpSessionManager::createSession(SOCKET client_socket, SOCKET target_socket, const std::string &mapper_key_, MappingType mapping_type) {
+    auto session = std::make_shared<TcpSession>(client_socket, target_socket, mapper_key_, mapping_type);
 
     std::lock_guard<std::mutex> lock(sessions_mutex_);
-    if (sessions_.count(client_socket)) {
-        qWarning() << "TCP session for socket" << client_socket << "already exists.";
-        return nullptr;
-    }
-    sessions_[client_socket] = session;
+    
+    sessions_.push_back(session);
     return session;
 }
 
-void TcpSessionManager::closeSession(SOCKET client_socket) {
-    
+void TcpSessionManager::removeSession(const std::string& mapper_key) {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
-    
-    auto it = sessions_.find(client_socket);
-    if (it != sessions_.end()) {
+    auto it = std::find_if(sessions_.begin(), sessions_.end(), [&mapper_key](const std::shared_ptr<TcpSession>& session) {
+        return session->mapper_key_ == mapper_key;
+    });
 
-        if (it->second->client_socket != INVALID_SOCKET) {
-            closesocket(it->second->client_socket);
-            it->second->client_socket = INVALID_SOCKET;
-        }
-        if (it->second->target_socket != INVALID_SOCKET) {
-            closesocket(it->second->target_socket);
-            it->second->target_socket = INVALID_SOCKET;
-        }
-        DelayedDeleteManager::getInstance()->addTask(it->second->mapper_key_, it->second->mapping_type_);
-        // qDebug() << "remove session map key:" << it->second->mapper_key_;
-        sessions_.erase(it); // 从map中移除
+    if (it != sessions_.end()) {
+        auto& session = *it;
+        DelayedDeleteManager::getInstance()->addTask(session->mapper_key_, session->mapping_type_);
+        session->closeClientSocket();
+        session->closeTargetSocket();
+        sessions_.erase(it);
     }
 }
 
@@ -61,13 +53,9 @@ size_t TcpSessionManager::getSessionCount() const {
 
 void TcpSessionManager::clearAllSessions() {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
-    for (auto &session : sessions_) {
-        if (session.second->client_socket != INVALID_SOCKET) {
-            closesocket(session.second->client_socket);
-        }
-        if (session.second->target_socket != INVALID_SOCKET) {
-            closesocket(session.second->target_socket);
-        }
+    for(auto& session : sessions_) {
+        session->closeClientSocket();
+        session->closeTargetSocket();
     }
     sessions_.clear();
 }

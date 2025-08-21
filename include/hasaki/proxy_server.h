@@ -54,7 +54,7 @@ struct PerIOContext {
     sockaddr_storage remote_addr;          // 用于UDP的远程地址
     int remote_addr_len;                   // 远程地址长度
 
-    std::weak_ptr<hasaki::TcpSession> tcp_session; // 指向ProxySession的指针
+    std::shared_ptr<hasaki::TcpSession> tcp_session;
     std::shared_ptr<hasaki::UdpSession> udp_session;
 
     PerIOContext() : socket(INVALID_SOCKET), operation(IO_NONE), socket_type(TYPE_NONE) {

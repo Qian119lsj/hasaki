@@ -62,7 +62,6 @@ public:
     void setBlacklistMode(bool enabled);
 
     bool isPortInTargetProcess(quint16 port) const;
-    QList<PortProcessInfo> getPortProcessList() const;
 
 signals:
     void mappingsChanged();
