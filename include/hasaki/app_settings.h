@@ -21,7 +21,7 @@ public:
     void          setProxyServerPort(int port);
     
     QList<hasaki::upstream_data> getUpstreams() const;
-    void addUpstream(const hasaki::upstream_data& upstream);
+    void addOrUpdateUpstream(const hasaki::upstream_data& upstream);
     void removeUpstream(const QString& name);
     QString getCurrentUpstreamName() const;
     void setCurrentUpstream(const QString& name);

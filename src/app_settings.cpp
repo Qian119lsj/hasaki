@@ -155,6 +155,8 @@ QList<hasaki::upstream_data> AppSettings::getUpstreams() const {
                 upstream.type = static_cast<hasaki::upstream_type>(serverObj["type"].toInt());
                 upstream.address = serverObj["address"].toString();
                 upstream.port = serverObj["port"].toInt();
+                upstream.local_address = serverObj["local_address"].toString();
+                upstream.local_port = serverObj["local_port"].toInt();
                 upstream.username = serverObj["username"].toString();
                 upstream.password = serverObj["password"].toString();
                 upstream.encryption_method = serverObj["encryption_method"].toString();
@@ -165,7 +167,7 @@ QList<hasaki::upstream_data> AppSettings::getUpstreams() const {
     return upstreams;
 }
 
-void AppSettings::addUpstream(const hasaki::upstream_data& upstream) {
+void AppSettings::addOrUpdateUpstream(const hasaki::upstream_data& upstream) {
     QJsonObject root = readJsonObject();
     QJsonArray serversArray;
     
@@ -182,6 +184,8 @@ void AppSettings::addUpstream(const hasaki::upstream_data& upstream) {
             serverObj["type"] = static_cast<int>(upstream.type);
             serverObj["address"] = upstream.address;
             serverObj["port"] = upstream.port;
+            serverObj["local_address"] = upstream.local_address;
+            serverObj["local_port"] = upstream.local_port;
             serverObj["username"] = upstream.username;
             serverObj["password"] = upstream.password;
             serverObj["encryption_method"] = upstream.encryption_method;
@@ -198,6 +202,8 @@ void AppSettings::addUpstream(const hasaki::upstream_data& upstream) {
         newServer["type"] = static_cast<int>(upstream.type);
         newServer["address"] = upstream.address;
         newServer["port"] = upstream.port;
+        newServer["local_address"] = upstream.local_address;
+        newServer["local_port"] = upstream.local_port;
         newServer["username"] = upstream.username;
         newServer["password"] = upstream.password;
         newServer["encryption_method"] = upstream.encryption_method;
@@ -225,7 +231,7 @@ void AppSettings::removeUpstream(const QString& name) {
         
         // 如果删除的是当前选中的服务器，更新当前服务器
         if (getCurrentUpstreamName() == name) {
-            root["CurrentUpstream"] = newArray[0].toObject()["name"].toString();
+            root["currentUpstream"] = newArray[0].toObject()["name"].toString();
         }
         
         root["upstreams"] = newArray;
@@ -235,7 +241,7 @@ void AppSettings::removeUpstream(const QString& name) {
 
 QString AppSettings::getCurrentUpstreamName() const {
     QJsonObject root = readJsonObject();
-    QString currentServer = root.value("CurrentUpstream").toString();
+    QString currentServer = root.value("currentUpstream").toString();
     
     if (currentServer.isEmpty()) {
         return "";
@@ -263,7 +269,7 @@ hasaki::upstream_data AppSettings::getCurrentUpstream() const {
 
 void AppSettings::setCurrentUpstream(const QString& name) {
     QJsonObject root = readJsonObject();
-    root["CurrentUpstream"] = name;
+    root["currentUpstream"] = name;
     writeJsonObject(root);
 }
 

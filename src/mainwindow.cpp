@@ -12,6 +12,8 @@
 #include <QMessageBox>
 #include <QNetworkInterface>
 #include <QHostAddress>
+#include <QDebug>
+#include <qdebug.h>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
@@ -45,7 +47,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     portProcessMonitor_->setBlacklistMode(appSettings_->isBlacklistEnabled());
     portProcessMonitor_->startMonitoring();
 
-    // 初始化SOCKS5服务器下拉框
+    // 初始化上游服务器下拉框
     upstreamComboBox_ = ui->upstreamComboBox;
     updateUpstreamComboBox();
     connect(ui->upstreamComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::on_upstreamComboBox_currentIndexChanged);
@@ -116,10 +118,12 @@ void MainWindow::on_actionAddUpstream_triggered() {
         upstream.type = dialog.getType();
         upstream.address = dialog.getAddress();
         upstream.port = dialog.getPort();
+        upstream.local_address = dialog.getLocalAddress();
+        upstream.local_port = dialog.getLocalPort();
         upstream.username = dialog.getUserName();
         upstream.password = dialog.getPassword();
         upstream.encryption_method = dialog.getEncryptionMethod();
-        appSettings_->addUpstream(upstream);
+        appSettings_->addOrUpdateUpstream(upstream);
         appSettings_->setCurrentUpstream(dialog.getName());
         updateUpstreamComboBox();
     }
@@ -270,9 +274,11 @@ void MainWindow::startForwarding() {
     // 获取当前选中的SOCKS5服务器信息
     hasaki::upstream_data upstreamInfo = appSettings_->getCurrentUpstream();
     upstream_client_ = new hasaki::upstream_client();
+    upstream_client_->type = upstreamInfo.type;
     upstream_client_->address = upstreamInfo.address.toStdString();
     upstream_client_->port = upstreamInfo.port;
-    upstream_client_->type = upstreamInfo.type;
+    upstream_client_->local_address = upstreamInfo.local_address.toStdString();
+    upstream_client_->local_port = upstreamInfo.local_port;
     upstream_client_->username = upstreamInfo.username.toStdString();
     upstream_client_->password = upstreamInfo.password.toStdString();
     upstream_client_->encryption_method = upstreamInfo.encryption_method.toStdString();
@@ -339,23 +345,8 @@ void MainWindow::on_editUpstreamButton_clicked() {
         return;
     }
 
-    QString currentServerName = ui->upstreamComboBox->currentText();
-    QList<hasaki::upstream_data> servers = appSettings_->getUpstreams();
-
-    // 查找当前选中的服务器
-    hasaki::upstream_data currentServer;
-    bool found = false;
-    for (const auto &server : servers) {
-        if (server.name == currentServerName) {
-            currentServer = server;
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        return;
-    }
+    hasaki::upstream_data currentServer = appSettings_->getCurrentUpstream();
+    qDebug() << "当前服务器信息: " << currentServer.name << currentServer.type << currentServer.address << currentServer.port << currentServer.local_address << currentServer.local_port << currentServer.username << currentServer.password << currentServer.encryption_method;
 
     // 创建编辑对话框
     UpstreamDialog dialog(this);
@@ -364,6 +355,8 @@ void MainWindow::on_editUpstreamButton_clicked() {
     dialog.setType(currentServer.type);
     dialog.setAddress(currentServer.address);
     dialog.setPort(currentServer.port);
+    dialog.setLocalAddress(currentServer.local_address);
+    dialog.setLocalPort(currentServer.local_port);
     dialog.setUserName(currentServer.username);
     dialog.setPassword(currentServer.password);
     dialog.setEncryptionMethod(currentServer.encryption_method);
@@ -375,8 +368,8 @@ void MainWindow::on_editUpstreamButton_clicked() {
 
         if (!newName.isEmpty() && !address.isEmpty() && port > 0) {
             // 如果名称改变了，需要先删除旧的服务器
-            if (newName != currentServerName) {
-                appSettings_->removeUpstream(currentServerName);
+            if (newName != currentServer.name) {
+                appSettings_->removeUpstream(currentServer.name);
             }
 
             // 添加或更新服务器
@@ -384,10 +377,12 @@ void MainWindow::on_editUpstreamButton_clicked() {
                                            .type = dialog.getType(),
                                            .address = address,
                                            .port = port,
+                                           .local_address = dialog.getLocalAddress(),
+                                           .local_port = dialog.getLocalPort(),
                                            .username = dialog.getUserName(),
                                            .password = dialog.getPassword(),
                                            .encryption_method = dialog.getEncryptionMethod()};
-            appSettings_->addUpstream(upstream);
+            appSettings_->addOrUpdateUpstream(upstream);
             appSettings_->setCurrentUpstream(newName);
             updateUpstreamComboBox();
         }
@@ -407,6 +402,7 @@ void MainWindow::on_deleteUpstreamButton_clicked() {
 
     if (reply == QMessageBox::Yes) {
         appSettings_->removeUpstream(currentServerName);
+        appSettings_->setCurrentUpstream(appSettings_->getUpstreams().first().name);
         updateUpstreamComboBox();
     }
 }

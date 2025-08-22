@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>300</height>
+    <height>304</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -44,7 +44,14 @@
       </widget>
      </item>
      <item row="2" column="1">
-      <widget class="QLineEdit" name="addressLineEdit"/>
+      <widget class="QLineEdit" name="addressLineEdit">
+       <property name="maxLength">
+        <number>100</number>
+       </property>
+       <property name="frame">
+        <bool>true</bool>
+       </property>
+      </widget>
      </item>
      <item row="3" column="0">
       <widget class="QLabel" name="portLabel">
@@ -54,9 +61,18 @@
       </widget>
      </item>
      <item row="3" column="1">
-      <widget class="QLineEdit" name="portLineEdit"/>
-     </item>
-     
+    <widget class="QSpinBox" name="portSpinBox">
+        <property name="minimum">
+        <number>1</number>
+        </property>
+        <property name="maximum">
+        <number>65535</number>
+        </property>
+        <property name="value">
+        <number>1080</number>
+        </property>
+    </widget>
+    </item>
      <item row="4" column="0">
       <widget class="QLabel" name="localAddressLabel">
        <property name="text">
@@ -75,8 +91,18 @@
       </widget>
      </item>
      <item row="5" column="1">
-      <widget class="QLineEdit" name="localPortLineEdit"/>
-     </item>
+      <widget class="QSpinBox" name="localPortSpinBox">
+        <property name="minimum">
+        <number>0</number>
+        </property>
+        <property name="maximum">
+        <number>65535</number>
+        </property>
+        <property name="value">
+        <number>0</number>
+        </property>
+    </widget>
+    </item>
      <item row="6" column="0">
       <widget class="QLabel" name="encryptionMethodLabel">
        <property name="text">

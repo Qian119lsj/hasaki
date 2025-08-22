@@ -25,10 +25,10 @@ class TcpSessionManager;
 
 // IO操作类型
 enum IO_OPERATION {
-    IO_NONE,   // 无操作
-    IO_ACCEPT, // 接受新连接
-    IO_RECV_TCP,   // 接收数据
-    IO_SEND_TCP,   // 发送数据
+    IO_NONE,     // 无操作
+    IO_ACCEPT,   // 接受新连接
+    IO_RECV_TCP, // 接收数据
+    IO_SEND_TCP, // 发送数据
     IO_RECV_UDP,
     IO_SEND_UDP,
     OP_EXIT,
@@ -46,24 +46,19 @@ enum ProtocolType { TCP, UDP };
 
 // 每个IO操作的上下文
 struct PerIOContext {
-    OVERLAPPED overlapped;                 // 重叠IO结构
-    WSABUF wsa_buf;                        // WSA缓冲区
-    char buffer[8192];                     // 数据缓冲区
-    SOCKET socket;                         // 关联的套接字
-    IO_OPERATION operation;                // 操作类型
-    SocketType socket_type;                // 套接字类型
-    sockaddr_storage remote_addr;          // 用于UDP的远程地址
-    int remote_addr_len;                   // 远程地址长度
+    OVERLAPPED overlapped;        // 重叠IO结构
+    WSABUF wsa_buf;               // WSA缓冲区
+    char buffer[8192];            // 数据缓冲区
+    SOCKET socket;                // 关联的套接字
+    IO_OPERATION operation;       // 操作类型
+    SocketType socket_type;       // 套接字类型
+    sockaddr_storage remote_addr; // 用于UDP的远程地址
+    int remote_addr_len;          // 远程地址长度
 
     std::shared_ptr<hasaki::TcpSession> tcp_session;
     std::shared_ptr<hasaki::UdpSession> udp_session;
 
-    PerIOContext() : socket(INVALID_SOCKET), operation(IO_NONE), socket_type(TYPE_NONE) {
-        ZeroMemory(&overlapped, sizeof(OVERLAPPED));
-        wsa_buf.buf = buffer;
-        wsa_buf.len = sizeof(buffer);
-        remote_addr_len = sizeof(remote_addr);
-    }
+    PerIOContext() : socket(INVALID_SOCKET), operation(IO_NONE), socket_type(TYPE_NONE) { reset(); }
 
     ~PerIOContext() = default;
 
@@ -119,7 +114,7 @@ private:
     bool handle_tcp_send(PerIOContext *io_context, DWORD bytes_transferred);
 
     // 处理UDP接收
-    void handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_session, DWORD bytes_transferred);
+    void handle_udp_receive(PerIOContext *io_context, DWORD bytes_transferred);
 
     // 构造SOCKS5 UDP请求头
     size_t construct_socks5_udp_header(char *header, const std::string &target_addr, uint16_t target_port, MappingType mapping_type);

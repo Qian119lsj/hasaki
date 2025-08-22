@@ -3,8 +3,11 @@
 #include <QDebug>
 #include <WinSock2.h>
 #include <minwindef.h>
+#include <qcontainerfwd.h>
 #include <qdebug.h>
+#include <QHostAddress>
 #include <qlogging.h>
+#include <ws2tcpip.h>
 #include "hasaki/mainwindow.h"
 #include "hasaki/udp_session_manager.h"
 #include "hasaki/tcp_session_manager.h"
@@ -182,8 +185,6 @@ void ProxyServer::worker_thread_func() {
                 qDebug() << "GetQueuedCompletionStatus失败，无重叠结构, 错误码: " << dwError;
                 continue;
             } else {
-                std::shared_ptr<hasaki::UdpSession> udp_session = std::move(io_context->udp_session);
-
                 if (dwError == ERROR_CONNECTION_ABORTED &&
                     (io_context->operation == IO_RECV_TCP || io_context->operation == IO_RECV_UDP)) { // The network connection was aborted by the local system
                 } else if (dwError == 121) {                                                          // ERROR_SEM_TIMEOUT
@@ -197,6 +198,9 @@ void ProxyServer::worker_thread_func() {
 
                 if (io_context->operation == IO_RECV_TCP || io_context->operation == IO_SEND_TCP) { // tcp
                     tcp_session_manager_->removeSession(io_context->tcp_session->mapper_key_);
+                    delete io_context;
+                } else if (io_context->operation == IO_RECV_UDP || io_context->operation == IO_SEND_UDP) {
+                    udp_session_manager_->removeSession(io_context->udp_session->mapper_key_);
                     delete io_context;
                 } else if (io_context->operation == IO_ACCEPT) {
                     delete io_context;
@@ -212,12 +216,13 @@ void ProxyServer::worker_thread_func() {
                 break;
             }
 
-            std::shared_ptr<hasaki::UdpSession> udp_session = std::move(io_context->udp_session);
-
             if (!is_running_ || (bytes_transferred == 0 && io_context->operation != IO_ACCEPT)) {
 
                 if (io_context->operation == IO_RECV_TCP || io_context->operation == IO_SEND_TCP) { // tcp
                     tcp_session_manager_->removeSession(io_context->tcp_session->mapper_key_);
+                    delete io_context;
+                } else if (io_context->operation == IO_RECV_UDP || io_context->operation == IO_SEND_UDP) {
+                    udp_session_manager_->removeSession(io_context->udp_session->mapper_key_);
                     delete io_context;
                 }
                 continue;
@@ -237,7 +242,7 @@ void ProxyServer::worker_thread_func() {
                 break;
 
             case IO_RECV_UDP:
-                handle_udp_receive(udp_session, bytes_transferred);
+                handle_udp_receive(io_context, bytes_transferred);
                 break;
 
             case IO_SEND_UDP:
@@ -388,9 +393,9 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
     send_context->operation = IO_SEND_TCP;
     send_context->tcp_session = tcp_session;
 
-    if (upstream_client_->type == hasaki::SOCKS5) { 
+    if (upstream_client_->type == hasaki::SOCKS5) {
         // 直接转发
-        
+
         memcpy(send_context->buffer, io_context->buffer, bytes_transferred);
         send_context->wsa_buf.len = bytes_transferred;
 
@@ -403,9 +408,8 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
                 return false;
             }
         }
-    }else if(upstream_client_->type == hasaki::SHADOWSOCKS_2022){
+    } else if (upstream_client_->type == hasaki::SHADOWSOCKS_2022) {
         // 加解密后转发
-        
     }
 
     // 继续接收
@@ -423,68 +427,43 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
     return true;
 }
 
-void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_session, DWORD bytes_transferred) {
+void ProxyServer::handle_udp_receive(PerIOContext *io_context, DWORD bytes_transferred) {
+    auto udp_session = io_context->udp_session;
     udp_session->update_activity_time();
-    auto io_context = udp_session->io_context.get();
+
     const char *data = io_context->buffer;
-    if (bytes_transferred < 10) {
-        return;
-    }
-    // 处理来自SOCKS5服务器的返回流量
-    char atyp = data[3];
+    std::vector<char> response;
     std::string orig_dst_addr;
     uint16_t orig_dst_port;
-    size_t header_len = 0;
+    if (upstream_client_->receiveFromRemote(data, bytes_transferred, response, orig_dst_addr, orig_dst_port)) {
 
-    if (atyp == 0x01) { // IPv4
-        if (bytes_transferred < 10)
+        // 获取网络接口索引
+        int interface_index = 1;
+        if (!udp_session) {
+            qDebug() << "UDP会话不存在";
             return;
-        char ip_str[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &data[4], ip_str, INET_ADDRSTRLEN);
-        orig_dst_addr = ip_str;
-        orig_dst_port = ntohs(*(uint16_t *)&data[8]);
-        header_len = 10;
-    } else if (atyp == 0x04) { // IPv6
-        if (bytes_transferred < 22)
-            return;
-        char ip_str[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET6, &data[4], ip_str, INET6_ADDRSTRLEN);
-        orig_dst_addr = ip_str;
-        orig_dst_port = ntohs(*(uint16_t *)&data[20]);
-        header_len = 22;
-    } else {
-        // 不支持的地址类型
-        qDebug() << "不支持的地址类型: " << static_cast<int>(atyp);
-        return;
-    }
+        }
+        QString clientIpQt = QString::fromStdString(udp_session->client_ip);
+        if (adapter_ip_map_.contains(clientIpQt)) {
+            interface_index = adapter_ip_map_.value(clientIpQt);
+        } else {
+            qDebug() << "未找到接口映射: " << QString::fromStdString(udp_session->client_ip);
+        }
 
-    // 获取网络接口索引
-    int interface_index = 1;
-    if (!udp_session) {
-        qDebug() << "UDP会话不存在";
-        return;
+        // qDebug() << "发送伪造UDP数据包: " << QString::fromStdString(orig_dst_addr) << ":" << orig_dst_port << " -> " <<
+        // QString::fromStdString(udp_session->client_ip) << ":" << udp_session->client_port; 使用UDP包注入器发送数据包
+        if (!udp_packet_injector_->sendSpoofedPacket(orig_dst_addr,            // 源IP (原始目标地址)
+                                                     orig_dst_port,            // 源端口 (原始目标端口)
+                                                     udp_session->client_ip,   // 目标IP (客户端IP)
+                                                     udp_session->client_port, // 目标端口 (客户端端口)
+                                                     response.data(),          // 负载数据
+                                                     response.size(),          // 负载长度
+                                                     interface_index           // 网络接口索引
+                                                     )) {
+            qDebug() << "发送伪造UDP数据包失败";
+        }
     }
-    QString clientIpQt = QString::fromStdString(udp_session->client_ip);
-    if (adapter_ip_map_.contains(clientIpQt)) {
-        interface_index = adapter_ip_map_.value(clientIpQt);
-    } else {
-        qDebug() << "未找到接口映射: " << QString::fromStdString(udp_session->client_ip);
-    }
-
-    // qDebug() << "发送伪造UDP数据包: " << QString::fromStdString(orig_dst_addr) << ":" << orig_dst_port << " -> " <<
-    // QString::fromStdString(udp_session->client_ip) << ":" << udp_session->client_port; 使用UDP包注入器发送数据包
-    bool result = udp_packet_injector_->sendSpoofedPacket(orig_dst_addr,                  // 源IP (原始目标地址)
-                                                          orig_dst_port,                  // 源端口 (原始目标端口)
-                                                          udp_session->client_ip,         // 目标IP (客户端IP)
-                                                          udp_session->client_port,       // 目标端口 (客户端端口)
-                                                          data + header_len,              // 负载数据
-                                                          bytes_transferred - header_len, // 负载长度
-                                                          interface_index                 // 网络接口索引
-    );
-
-    if (!result) {
-        qDebug() << "发送伪造UDP数据包失败";
-    }
+    delete io_context;
 
     // 继续投递新的UDP接收请求
     post_udp_recv(udp_session);
@@ -589,7 +568,7 @@ bool ProxyServer::handle_tcp_send(PerIOContext *io_context, DWORD bytes_transfer
     return true;
 }
 
-void ProxyServer::handle_udp_send(PerIOContext *io_context, DWORD bytes_transferred) {}
+void ProxyServer::handle_udp_send(PerIOContext *io_context, DWORD bytes_transferred) { delete io_context; }
 
 void ProxyServer::post_tcp_accept(SOCKET listen_socket, PerIOContext *io_context) {
     io_context->operation = IO_ACCEPT;
@@ -625,12 +604,11 @@ void ProxyServer::post_tcp_accept(SOCKET listen_socket, PerIOContext *io_context
 }
 
 void ProxyServer::post_udp_recv(std::shared_ptr<hasaki::UdpSession> udp_session) {
-    // qDebug() << "post_udp_recv";
-    auto io_context = udp_session->io_context.get();
-    io_context->reset();
+    auto io_context = new PerIOContext();
     io_context->operation = IO_RECV_UDP;
-
+    io_context->socket = udp_session->local_socket;
     io_context->udp_session = udp_session;
+
     DWORD flags = 0;
     if (WSARecvFrom(udp_session->local_socket, &io_context->wsa_buf, 1, nullptr, &flags, (SOCKADDR *)&io_context->remote_addr, &io_context->remote_addr_len,
                     &io_context->overlapped, nullptr) == SOCKET_ERROR) {
@@ -641,36 +619,81 @@ void ProxyServer::post_udp_recv(std::shared_ptr<hasaki::UdpSession> udp_session)
     }
 }
 
+// 客户端->上游服务器
 bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, const std::string &src_ip, uint16_t src_port, const std::string &dst_ip,
                                   uint16_t dst_port, bool is_ipv6) {
 
     // 获取或创建会话
     bool is_new_session = false;
-    auto session = udp_session_manager_->getOrCreateSession(src_ip, src_port, dst_ip, dst_port, is_ipv6, &is_new_session);
+
+    // 创建会话键
+    std::string session_key = hasaki::UdpSessionManager::createSessionKey(src_ip, src_port);
+    auto session = udp_session_manager_->getOrCreateSession(session_key, src_ip, src_port, dst_ip, dst_port, is_ipv6, &is_new_session);
     if (!session) {
         qDebug() << "创建UDP会话失败";
         return false;
     }
 
-    // 发送数据上游服务器
-    bool result = upstream_client_->sendToRemote(session->local_socket, packet_data, packet_len, dst_ip, dst_port, is_ipv6);
+    if (is_new_session) {
+        // 创建本地UDP套接字
+        SOCKET sock = socket(is_ipv6 ? AF_INET6 : AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (sock == INVALID_SOCKET) {
+            qDebug() << "创建UDP套接字失败: " << WSAGetLastError();
+            return false;
+        }
 
-    if (!result) {
+        QString local_address = QString::fromStdString(upstream_client_->local_address);
+        QHostAddress addr(local_address);
+        if (addr.protocol() == QAbstractSocket::IPv4Protocol) {
+            sockaddr_in addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(upstream_client_->local_port);
+            inet_pton(AF_INET, upstream_client_->local_address.c_str(), &addr.sin_addr);
+
+            if (bind(sock, (sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR) {
+                qDebug() << "绑定UDP套接字失败: " << WSAGetLastError();
+                closesocket(sock);
+                return false;
+            }
+        } else if (addr.protocol() == QAbstractSocket::IPv6Protocol) {
+            sockaddr_in6 addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin6_family = AF_INET6;
+            addr.sin6_port = htons(upstream_client_->local_port);
+            inet_pton(AF_INET6, upstream_client_->local_address.c_str(), &addr.sin6_addr);
+
+            if (bind(sock, (sockaddr *)&addr, sizeof(addr)) == SOCKET_ERROR) {
+                qDebug() << "绑定UDP套接字失败: " << WSAGetLastError();
+                closesocket(sock);
+                return false;
+            }
+        } else {
+            qDebug() << "不支持的地址族";
+            closesocket(sock);
+            return false;
+        }
+
+        session->local_socket = sock;
+    }
+
+    // 发送数据上游服务器
+    if (!upstream_client_->sendToRemote(session->local_socket, packet_data, packet_len, dst_ip, dst_port, is_ipv6)) {
         qDebug() << "发送UDP数据到上游服务器失败: " << WSAGetLastError() << "remote_addr: " << dst_ip << ":" << dst_port;
+        return false;
     }
 
     if (is_new_session) {
         // 将UDP套接字关联到IOCP
-        // qDebug() << "关联UDP套接字到IOCP";
         if (CreateIoCompletionPort((HANDLE)session->local_socket, iocp_handle_, 0, 0) == nullptr) {
             qDebug() << "关联UDP套接字到IOCP失败: " << GetLastError();
-            closesocket(session->local_socket);
-            session->local_socket = INVALID_SOCKET;
             return false;
         }
-
         // 投递UDP_RECV
         post_udp_recv(session);
+        // 添加到会话映射表
+        udp_session_manager_->addSession(session_key, session);
     }
-    return result;
+
+    return true;
 }

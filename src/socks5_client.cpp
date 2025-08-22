@@ -153,6 +153,47 @@ bool Socks5Client::sendToRemote(SOCKET &socket, const char *data, size_t data_le
     return true;
 }
 
+bool Socks5Client::receiveFromRemote(const char *data, size_t data_len, std::vector<char> &response, std::string &orig_dst_addr, uint16_t &orig_dst_port) {
+
+    if (data_len < 4) {
+        return false;
+    }
+    // 处理来自SOCKS5服务器的返回流量
+    char atyp = data[3];
+    size_t header_len = 0;
+    if (atyp == 0x01) { // IPv4
+        if (data_len < 10)
+            return false;
+        char ip_str[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &data[4], ip_str, INET_ADDRSTRLEN);
+        orig_dst_addr = ip_str;
+
+        uint16_t net_port;
+        memcpy(&net_port, data + 8, sizeof(net_port));
+        orig_dst_port = ntohs(net_port);
+        header_len = 10;
+    } else if (atyp == 0x04) { // IPv6
+        if (data_len < 22)
+            return false;
+        char ip_str[INET6_ADDRSTRLEN];
+        inet_ntop(AF_INET6, &data[4], ip_str, INET6_ADDRSTRLEN);
+        orig_dst_addr = ip_str;
+
+        uint16_t net_port;
+        memcpy(&net_port, data + 20, sizeof(net_port));
+        orig_dst_port = ntohs(net_port);
+        header_len = 22;
+    } else {
+        // 不支持的地址类型
+        qDebug() << "不支持的地址类型: " << static_cast<int>(atyp);
+        return false;
+    }
+    
+    response.assign(data + header_len, data + data_len);
+
+    return true;
+}
+
 bool Socks5Client::performHandshake(SOCKET sock) {
     // SOCKS5握手请求 (无认证)
     unsigned char handshake[3] = {0x05, 0x01, 0x00}; // SOCKS5, 1种认证方法, 无认证(0x00)

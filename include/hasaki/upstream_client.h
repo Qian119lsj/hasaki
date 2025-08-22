@@ -43,6 +43,12 @@ struct upstream_client {
         }
         return false;
     };
+    bool receiveFromRemote(const char *data, size_t data_len, std::vector<char> &response, std::string &orig_dst_addr, uint16_t &orig_dst_port) {
+        if (type == SOCKS5) {
+            return socks5_client->receiveFromRemote(data, data_len, response, orig_dst_addr, orig_dst_port);
+        }
+        return false;
+    };
 };
 
 } // namespace hasaki

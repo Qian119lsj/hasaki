@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 class Socks5Client {
 public:
@@ -16,6 +17,7 @@ public:
 
     bool sendToRemote(SOCKET &socket, const char *data, size_t data_len, const std::string &dst_ip, uint16_t dst_port, bool is_ipv6);
 
+    bool receiveFromRemote(const char *data, size_t data_len, std::vector<char> &response, std::string &orig_dst_addr, uint16_t &orig_dst_port);
 private:
     std::string local_address;
     uint16_t local_port;

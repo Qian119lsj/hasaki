@@ -232,7 +232,6 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                         continue;
                     }
                     if (dstPort != 53) { // 暂时不处理53端口
-                        // 使用UDP会话管理器处理IPv6 UDP数据包
                         bool handled = proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6);
                         if (!handled) {
                             qDebug() << "UDP 数据包未处理";

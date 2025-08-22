@@ -13,13 +13,10 @@ UpstreamDialog::UpstreamDialog(QWidget *parent) : QDialog(parent), ui(new Ui::Up
     ui->encryptionMethodComboBox->addItem("2022-blake3-aes-128-gcm");
     ui->encryptionMethodComboBox->addItem("2022-blake3-aes-256-gcm");
 
-    ui->portLineEdit->setValidator(new QIntValidator(0, 65535, this));
-    ui->localPortLineEdit->setValidator(new QIntValidator(0, 65535, this));
     // Connect signals
     connect(ui->typeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &UpstreamDialog::onTypeChanged);
 
     ui->localAddressLineEdit->setText("0.0.0.0");
-    ui->localPortLineEdit->setText("0");
 
     // Initialize UI state
     onTypeChanged(0);
@@ -35,17 +32,17 @@ void UpstreamDialog::setAddress(const QString &address) { ui->addressLineEdit->s
 
 QString UpstreamDialog::getAddress() const { return ui->addressLineEdit->text(); }
 
-void UpstreamDialog::setPort(int port) { ui->portLineEdit->setText(QString::number(port)); }
+void UpstreamDialog::setPort(int port) { ui->portSpinBox->setValue(port); }
 
-int UpstreamDialog::getPort() const { return ui->portLineEdit->text().toInt(); }
+int UpstreamDialog::getPort() const { return ui->portSpinBox->value(); }
 
 void UpstreamDialog::setLocalAddress(const QString &address) { ui->localAddressLineEdit->setText(address); }
 
 QString UpstreamDialog::getLocalAddress() const { return ui->localAddressLineEdit->text(); }
 
-void UpstreamDialog::setLocalPort(int port) { ui->localPortLineEdit->setText(QString::number(port)); }
+void UpstreamDialog::setLocalPort(int port) { ui->localPortSpinBox->setValue(port); }
 
-int UpstreamDialog::getLocalPort() const { return ui->localPortLineEdit->text().toInt(); }
+int UpstreamDialog::getLocalPort() const { return ui->localPortSpinBox->value(); }
 
 QString UpstreamDialog::getUserName() const { return ui->userNameLineEdit->text(); }
 
