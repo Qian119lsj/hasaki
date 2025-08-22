@@ -7,12 +7,7 @@
 #include <QString>
 #include <QList>
 #include <QPair>
-
-struct Socks5Server {
-    QString name;
-    QString address;
-    int port;
-};
+#include "hasaki/data/upstream_data.h"
 
 class AppSettings : public QObject {
     Q_OBJECT
@@ -25,13 +20,12 @@ public:
     int           getProxyServerPort() const;
     void          setProxyServerPort(int port);
     
-    // 移除单个SOCKS5服务器设置，改为多服务器管理
-    QList<Socks5Server> getSocks5Servers() const;
-    void addSocks5Server(const QString& name, const QString& address, int port);
-    void removeSocks5Server(const QString& name);
-    QString getCurrentSocks5Server() const;
-    void setCurrentSocks5Server(const QString& name);
-    QPair<QString, int> getCurrentSocks5ServerInfo() const;
+    QList<hasaki::upstream_data> getUpstreams() const;
+    void addUpstream(const hasaki::upstream_data& upstream);
+    void removeUpstream(const QString& name);
+    QString getCurrentUpstreamName() const;
+    void setCurrentUpstream(const QString& name);
+    hasaki::upstream_data getCurrentUpstream() const;
 
     bool isBlacklistEnabled() const;
     void setBlacklistEnabled(bool enabled);

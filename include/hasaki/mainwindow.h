@@ -53,7 +53,7 @@ public:
 
 private slots:
     void on_actionSettings_triggered();
-    void on_actionAddSocks5Server_triggered();
+    void on_actionAddUpstream_triggered();
     void on_actionUdpTest_triggered();
     void on_actionConsoleWindow_triggered();
     void applySettings();
@@ -61,37 +61,38 @@ private slots:
     void updateSessionStatusBar(); // 新增：更新状态栏会话数
     void on_startButton_clicked();
     void on_stopButton_clicked();
-    void on_socks5ServerComboBox_currentIndexChanged(int index);
-    void on_editServerButton_clicked();
-    void on_deleteServerButton_clicked();
+    void on_upstreamComboBox_currentIndexChanged(int index);
+    void on_editUpstreamButton_clicked();
+    void on_deleteUpstreamButton_clicked();
 
 private:
     void startForwarding();
     void stopForwarding();
     void applySettingsFromDialog(SettingsDialog* dialog);
-    void updateSocks5ServerComboBox();
+    void updateUpstreamComboBox();
     void initializeAdapterIpMap();
 
-    Ui::MainWindow* ui;
-    AppSettings* appSettings_;
-    PortProcessMonitor* portProcessMonitor_;
-    PacketForwarder* packetForwarder_;
-    ProxyServer* proxyServer_;
-    EndpointMapper* endpointMapper_;
-    hasaki::UdpSessionManager* udpSessionManager_; // 使用单例，但仍保留指针
-    hasaki::UdpPacketInjector* udpPacketInjector_;
-    QComboBox* socks5ServerComboBox_;
+    Ui::MainWindow* ui = nullptr;
+    AppSettings* appSettings_ = nullptr;
+    PortProcessMonitor* portProcessMonitor_ = nullptr;
+    PacketForwarder* packetForwarder_ = nullptr;
+    hasaki::upstream_client* upstream_client_ = nullptr;
+    ProxyServer* proxyServer_ = nullptr;
+    EndpointMapper* endpointMapper_ = nullptr;
+    hasaki::UdpSessionManager* udpSessionManager_ = nullptr; // 使用单例，但仍保留指针
+    hasaki::UdpPacketInjector* udpPacketInjector_ = nullptr;
+    QComboBox* upstreamComboBox_ = nullptr;
     bool is_running_ = false;
     
     // 存储IP地址到网络适配器索引的映射
     QMap<QString, int> adapterIpMap_;
     
     // 定时器，用于定期更新UDP会话表格
-    QTimer* udpSessionUpdateTimer_;
+    QTimer* udpSessionUpdateTimer_ = nullptr;
     
     // 定时器，用于定期更新状态栏会话数
-    QTimer* sessionCountUpdateTimer_;
+    QTimer* sessionCountUpdateTimer_ = nullptr;
     
     // 状态栏标签
-    QLabel* sessionStatusLabel_;
+    QLabel* sessionStatusLabel_ = nullptr;
 };

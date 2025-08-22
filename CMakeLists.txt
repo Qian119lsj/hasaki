@@ -16,9 +16,9 @@ set(SOURCES
     "src/settings_dialog.cpp"
     src/utils.cpp
     src/proxy_server.cpp
-    "src/socks5client.cpp"
+    "src/socks5_client.cpp"
     src/endpoint_mapper.cpp
-    src/socks5serverdialog.cpp
+    src/upstreamdialog.cpp
     src/delayed_delete_manager.cpp
     src/udp_packet_injector.cpp
     src/udptestdialog.cpp
@@ -26,6 +26,7 @@ set(SOURCES
     src/tcp_session_manager.cpp
     src/console_manager.cpp
 )
+
 
 file(GLOB_RECURSE UIS "src/*.ui")
 
@@ -39,7 +40,7 @@ set(HEADERS
     include/hasaki/proxy_server.h
     "include/hasaki/socks5_client.h"
     include/hasaki/endpoint_mapper.h
-    include/hasaki/socks5serverdialog.h
+    include/hasaki/upstreamdialog.h
     include/hasaki/udp_packet_injector.h
     include/hasaki/udptestdialog.h
     include/hasaki/udp_session_manager.h

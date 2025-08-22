@@ -1,5 +1,6 @@
 #pragma once
 
+#include "upstream_client.h"
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -83,7 +84,7 @@ public:
     ProxyServer(EndpointMapper *endpoint_mapper);
     ~ProxyServer();
 
-    void setSocks5Server(const std::string &address, uint16_t port);
+    void setUpstreamClient(hasaki::upstream_client *upstream_client);
     void setAdapterIpMap(const QMap<QString, int> &adapter_ip_map);
     void setUdpPacketInjector(hasaki::UdpPacketInjector *udp_packet_injector);
 
@@ -135,22 +136,17 @@ private:
 private:
     uint16_t port_;
     std::atomic<bool> is_running_;
+    std::vector<std::thread> worker_threads_;
     QMap<QString, int> adapter_ip_map_;
 
-    std::string socks5_address_;
-    uint16_t socks5_port_;
+    hasaki::upstream_client *upstream_client_ = nullptr;
 
-    SOCKET socks5_control_socket_;
-    std::string socks5_udp_relay_addr_;
-    uint16_t socks5_udp_relay_port_;
+    EndpointMapper *endpoint_mapper_ = nullptr;
+    hasaki::UdpPacketInjector *udp_packet_injector_ = nullptr;
+    hasaki::UdpSessionManager *udp_session_manager_ = nullptr;
+    hasaki::TcpSessionManager *tcp_session_manager_ = nullptr;
 
-    EndpointMapper *endpoint_mapper_;
-    hasaki::UdpPacketInjector *udp_packet_injector_;
-    hasaki::UdpSessionManager *udp_session_manager_;
-    hasaki::TcpSessionManager *tcp_session_manager_;
-
-    SOCKET tcp_listen_socket_;
-    HANDLE iocp_handle_;
-    LPFN_ACCEPTEX lpfn_acceptex_;
-    std::vector<std::thread> worker_threads_;
+    SOCKET tcp_listen_socket_ = INVALID_SOCKET;
+    HANDLE iocp_handle_ = nullptr;
+    LPFN_ACCEPTEX lpfn_acceptex_ = nullptr;
 };

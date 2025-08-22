@@ -141,55 +141,50 @@ void AppSettings::setProxyServerPort(int port) {
     writeJsonObject(root);
 }
 
-QList<Socks5Server> AppSettings::getSocks5Servers() const {
-    QList<Socks5Server> servers;
+QList<hasaki::upstream_data> AppSettings::getUpstreams() const {
+    QList<hasaki::upstream_data> upstreams;
     QJsonObject root = readJsonObject();
     
-    if (root.contains("Socks5Servers") && root["Socks5Servers"].isArray()) {
-        QJsonArray array = root["Socks5Servers"].toArray();
+    if (root.contains("upstreams") && root["upstreams"].isArray()) {
+        QJsonArray array = root["upstreams"].toArray();
         for (const auto& value : array) {
             if (value.isObject()) {
                 QJsonObject serverObj = value.toObject();
-                Socks5Server server;
-                server.name = serverObj["name"].toString();
-                server.address = serverObj["address"].toString();
-                server.port = serverObj["port"].toInt();
-                servers.append(server);
+                hasaki::upstream_data upstream;
+                upstream.name = serverObj["name"].toString();
+                upstream.type = static_cast<hasaki::upstream_type>(serverObj["type"].toInt());
+                upstream.address = serverObj["address"].toString();
+                upstream.port = serverObj["port"].toInt();
+                upstream.username = serverObj["username"].toString();
+                upstream.password = serverObj["password"].toString();
+                upstream.encryption_method = serverObj["encryption_method"].toString();
+                upstreams.append(upstream);
             }
         }
     }
-    
-    // 如果没有服务器，添加默认服务器
-    if (servers.isEmpty()) {
-        Socks5Server defaultServer;
-        defaultServer.name = "默认";
-        defaultServer.address = "127.0.0.1";
-        defaultServer.port = 1087;
-        servers.append(defaultServer);
-        
-        // 保存默认服务器，使用非const对象调用
-        const_cast<AppSettings*>(this)->addSocks5Server(defaultServer.name, defaultServer.address, defaultServer.port);
-    }
-    
-    return servers;
+    return upstreams;
 }
 
-void AppSettings::addSocks5Server(const QString& name, const QString& address, int port) {
+void AppSettings::addUpstream(const hasaki::upstream_data& upstream) {
     QJsonObject root = readJsonObject();
     QJsonArray serversArray;
     
     // 读取现有服务器
-    if (root.contains("Socks5Servers") && root["Socks5Servers"].isArray()) {
-        serversArray = root["Socks5Servers"].toArray();
+    if (root.contains("upstreams") && root["upstreams"].isArray()) {
+        serversArray = root["upstreams"].toArray();
     }
     
     // 检查是否已存在同名服务器，如果存在则更新
     bool found = false;
     for (int i = 0; i < serversArray.size(); ++i) {
         QJsonObject serverObj = serversArray[i].toObject();
-        if (serverObj["name"].toString() == name) {
-            serverObj["address"] = address;
-            serverObj["port"] = port;
+        if (serverObj["name"].toString() == upstream.name) {
+            serverObj["type"] = static_cast<int>(upstream.type);
+            serverObj["address"] = upstream.address;
+            serverObj["port"] = upstream.port;
+            serverObj["username"] = upstream.username;
+            serverObj["password"] = upstream.password;
+            serverObj["encryption_method"] = upstream.encryption_method;
             serversArray[i] = serverObj;
             found = true;
             break;
@@ -199,21 +194,25 @@ void AppSettings::addSocks5Server(const QString& name, const QString& address, i
     // 如果不存在，添加新服务器
     if (!found) {
         QJsonObject newServer;
-        newServer["name"] = name;
-        newServer["address"] = address;
-        newServer["port"] = port;
+        newServer["name"] = upstream.name;
+        newServer["type"] = static_cast<int>(upstream.type);
+        newServer["address"] = upstream.address;
+        newServer["port"] = upstream.port;
+        newServer["username"] = upstream.username;
+        newServer["password"] = upstream.password;
+        newServer["encryption_method"] = upstream.encryption_method;
         serversArray.append(newServer);
     }
     
-    root["Socks5Servers"] = serversArray;
+    root["upstreams"] = serversArray;
     writeJsonObject(root);
 }
 
-void AppSettings::removeSocks5Server(const QString& name) {
+void AppSettings::removeUpstream(const QString& name) {
     QJsonObject root = readJsonObject();
     
-    if (root.contains("Socks5Servers") && root["Socks5Servers"].isArray()) {
-        QJsonArray serversArray = root["Socks5Servers"].toArray();
+    if (root.contains("upstreams") && root["upstreams"].isArray()) {
+        QJsonArray serversArray = root["upstreams"].toArray();
         QJsonArray newArray;
         
         // 复制除了要删除的服务器外的所有服务器
@@ -224,59 +223,49 @@ void AppSettings::removeSocks5Server(const QString& name) {
             }
         }
         
-        // 如果删除后没有服务器，添加默认服务器
-        if (newArray.isEmpty()) {
-            QJsonObject defaultServer;
-            defaultServer["name"] = "默认";
-            defaultServer["address"] = "127.0.0.1";
-            defaultServer["port"] = 1087;
-            newArray.append(defaultServer);
-        }
-        
         // 如果删除的是当前选中的服务器，更新当前服务器
-        if (getCurrentSocks5Server() == name) {
-            root["CurrentSocks5Server"] = newArray[0].toObject()["name"].toString();
+        if (getCurrentUpstreamName() == name) {
+            root["CurrentUpstream"] = newArray[0].toObject()["name"].toString();
         }
         
-        root["Socks5Servers"] = newArray;
+        root["upstreams"] = newArray;
         writeJsonObject(root);
     }
 }
 
-QString AppSettings::getCurrentSocks5Server() const {
+QString AppSettings::getCurrentUpstreamName() const {
     QJsonObject root = readJsonObject();
-    QString currentServer = root.value("CurrentSocks5Server").toString();
+    QString currentServer = root.value("CurrentUpstream").toString();
     
-    // 如果当前服务器为空，返回第一个服务器的名称
     if (currentServer.isEmpty()) {
-        QList<Socks5Server> servers = getSocks5Servers();
-        if (!servers.isEmpty()) {
-            currentServer = servers.first().name;
-        }
+        return "";
     }
     
     return currentServer;
 }
 
-void AppSettings::setCurrentSocks5Server(const QString& name) {
-    QJsonObject root = readJsonObject();
-    root["CurrentSocks5Server"] = name;
-    writeJsonObject(root);
-}
-
-QPair<QString, int> AppSettings::getCurrentSocks5ServerInfo() const {
-    QString currentServerName = getCurrentSocks5Server();
-    QList<Socks5Server> servers = getSocks5Servers();
+hasaki::upstream_data AppSettings::getCurrentUpstream() const {
+    QString name = getCurrentUpstreamName();
+    if (name.isEmpty()) {
+        return hasaki::upstream_data();
+    }
     
-    for (const auto& server : servers) {
-        if (server.name == currentServerName) {
-            return qMakePair(server.address, server.port);
+    QList<hasaki::upstream_data> servers = getUpstreams();
+    for (const hasaki::upstream_data& server : servers) {
+        if (server.name == name) {
+            return server;
         }
     }
     
-    // 如果找不到当前服务器，返回默认值
-    return qMakePair(QString("127.0.0.1"), 1087);
-} 
+    return hasaki::upstream_data();
+}
+
+
+void AppSettings::setCurrentUpstream(const QString& name) {
+    QJsonObject root = readJsonObject();
+    root["CurrentUpstream"] = name;
+    writeJsonObject(root);
+}
 
 bool AppSettings::isIpv6Enabled() const {
     return readJsonObject().value("EnableIpv6").toBool(true);

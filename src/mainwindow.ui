@@ -21,14 +21,14 @@
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <widget class="QLabel" name="socks5ServerLabel">
+       <widget class="QLabel" name="upstreamLabel">
         <property name="text">
-         <string>SOCKS5服务器:</string>
+         <string>上游服务器:</string>
         </property>
        </widget>
       </item>
       <item>
-       <widget class="QComboBox" name="socks5ServerComboBox">
+       <widget class="QComboBox" name="upstreamComboBox">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
           <horstretch>0</horstretch>
@@ -50,34 +50,34 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="editServerButton">
+       <widget class="QPushButton" name="editUpstreamButton">
         <property name="maximumSize">
          <size>
           <width>30</width>
           <height>30</height>
          </size>
-        </property>
-        <property name="text">
-         <string>✏️</string>
         </property>
         <property name="toolTip">
          <string>编辑当前服务器</string>
         </property>
+        <property name="text">
+         <string>✏️</string>
+        </property>
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="deleteServerButton">
+       <widget class="QPushButton" name="deleteUpstreamButton">
         <property name="maximumSize">
          <size>
           <width>30</width>
           <height>30</height>
          </size>
         </property>
-        <property name="text">
-         <string>❌</string>
-        </property>
         <property name="toolTip">
          <string>删除当前服务器</string>
+        </property>
+        <property name="text">
+         <string>❌</string>
         </property>
        </widget>
       </item>
@@ -130,7 +130,7 @@
     </property>
     <addaction name="actionConsoleWindow"/>
     <addaction name="actionSettings"/>
-    <addaction name="actionAddSocks5Server"/>
+    <addaction name="actionAddUpstream"/>
     <addaction name="actionUdpTest"/>
    </widget>
    <widget class="QMenu" name="menu_2">
@@ -155,9 +155,12 @@
     <string>设置</string>
    </property>
   </action>
-  <action name="actionAddSocks5Server">
+  <action name="actionAddUpstream">
    <property name="text">
-    <string>添加SOCKS5服务器</string>
+    <string>添加上游</string>
+   </property>
+   <property name="toolTip">
+    <string>添加上游</string>
    </property>
   </action>
   <action name="actionUdpTest">

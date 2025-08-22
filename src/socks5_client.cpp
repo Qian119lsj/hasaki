@@ -1,57 +1,156 @@
 #include "hasaki/socks5_client.h"
 
 #include <QDebug>
+#include <rpcndr.h>
 #include <ws2tcpip.h>
 
-SOCKET Socks5Client::connectTarget(const std::string &socks5_addr, uint16_t socks5_port, const std::string &target_addr, uint16_t target_port) {
+Socks5Client::Socks5Client(const std::string &local_address, uint16_t local_port, const std::string &server_address, uint16_t server_port) {
+    this->local_address = local_address;
+    this->local_port = local_port;
+    this->server_address = server_address;
+    this->server_port = server_port;
+
+    // 建立udp关联
+    if (!associateUdp()) {
+        throw std::runtime_error("建立UDP关联失败");
+    }
+}
+
+Socks5Client::~Socks5Client() {
+    if (socks5_control_socket_ != INVALID_SOCKET) {
+        closesocket(socks5_control_socket_);
+    }
+}
+
+bool Socks5Client::connect_to_remote(SOCKET &remote_socket, const std::string &target_addr, uint16_t target_port) {
     // 创建套接字
-    SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock == INVALID_SOCKET) {
+    remote_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (remote_socket == INVALID_SOCKET) {
         qDebug() << "创建SOCKS5客户端套接字失败: " << WSAGetLastError();
-        return INVALID_SOCKET;
+        return false;
+    }
+
+    if (!local_address.empty() && local_port > 0) {
+        sockaddr_in local_addr;
+        memset(&local_addr, 0, sizeof(local_addr));
+        local_addr.sin_family = AF_INET;
+        local_addr.sin_port = htons(local_port);
+        if (inet_pton(AF_INET, local_address.c_str(), &local_addr.sin_addr) != 1) {
+            qDebug() << "无效的本地地址: " << QString::fromStdString(local_address);
+            closesocket(remote_socket);
+            remote_socket = INVALID_SOCKET;
+            return false;
+        }
+        if (bind(remote_socket, (sockaddr *)&local_addr, sizeof(local_addr)) == SOCKET_ERROR) {
+            qDebug() << "绑定SOCKS5客户端套接字失败: " << WSAGetLastError();
+            closesocket(remote_socket);
+            remote_socket = INVALID_SOCKET;
+            return false;
+        }
     }
 
     // 连接到SOCKS5服务器
     sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(socks5_port);
+    server_addr.sin_port = htons(server_port);
 
-    // 使用inet_pton代替过时的inet_addr
-    if (inet_pton(AF_INET, socks5_addr.c_str(), &server_addr.sin_addr) != 1) {
-        qDebug() << "无效的SOCKS5服务器地址: " << QString::fromStdString(socks5_addr);
-        closesocket(sock);
-        return INVALID_SOCKET;
+    if (inet_pton(AF_INET, server_address.c_str(), &server_addr.sin_addr) != 1) {
+        qDebug() << "无效的SOCKS5服务器地址: " << QString::fromStdString(server_address);
+        closesocket(remote_socket);
+        remote_socket = INVALID_SOCKET;
+        return false;
     }
 
-    if (connect(sock, (sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+    if (connect(remote_socket, (sockaddr *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
         qDebug() << "连接SOCKS5服务器失败: " << WSAGetLastError();
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(remote_socket);
+        remote_socket = INVALID_SOCKET;
+        return false;
     }
 
     // 执行SOCKS5握手
-    if (!performHandshake(sock)) {
+    if (!performHandshake(remote_socket)) {
         qDebug() << "SOCKS5握手失败";
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(remote_socket);
+        remote_socket = INVALID_SOCKET;
+        return false;
     }
 
     // 发送连接请求
-    if (!sendConnectRequest(sock, target_addr, target_port)) {
+    if (!sendConnectRequest(remote_socket, target_addr, target_port)) {
         qDebug() << "发送SOCKS5连接请求失败";
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(remote_socket);
+        remote_socket = INVALID_SOCKET;
+        return false;
     }
 
     // 接收连接响应
-    if (!receiveConnectResponse(sock)) {
+    if (!receiveConnectResponse(remote_socket)) {
         qDebug() << "接收SOCKS5连接响应失败";
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(remote_socket);
+        remote_socket = INVALID_SOCKET;
+        return false;
     }
 
-    return sock;
+    return true;
+}
+
+bool Socks5Client::sendToRemote(SOCKET &socket, const char *data, size_t data_len, const std::string &dst_ip, uint16_t dst_port, bool is_ipv6) {
+
+    // 构造SOCKS5 UDP请求头
+    char header[512];
+    size_t header_len = Socks5Client::constructSocks5UdpHeader(header, dst_ip, dst_port, is_ipv6);
+    if (header_len == 0) {
+        qDebug() << "构造SOCKS5 UDP请求头失败";
+        return false;
+    }
+
+    // 创建完整数据包
+    char *send_buffer = new char[header_len + data_len];
+    memcpy(send_buffer, header, header_len);
+
+    // 只有当packet_data不为空且packet_len大于0时才复制数据
+    if (data != nullptr && data_len > 0) {
+        memcpy(send_buffer + header_len, data, data_len);
+    } else {
+        qDebug() << "收到空的UDP数据包";
+    }
+
+    // 创建目标地址
+    sockaddr_storage to_addr;
+    int to_addr_len = 0;
+
+    if (socks5_udp_relay_addr_.find(':') != std::string::npos) {
+        // IPv6地址
+        sockaddr_in6 addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin6_family = AF_INET6;
+        inet_pton(AF_INET6, socks5_udp_relay_addr_.c_str(), &addr.sin6_addr);
+        addr.sin6_port = htons(socks5_udp_relay_port_);
+
+        memcpy(&to_addr, &addr, sizeof(addr));
+        to_addr_len = sizeof(addr);
+    } else {
+        // IPv4地址
+        sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        inet_pton(AF_INET, socks5_udp_relay_addr_.c_str(), &addr.sin_addr);
+        addr.sin_port = htons(socks5_udp_relay_port_);
+
+        memcpy(&to_addr, &addr, sizeof(addr));
+        to_addr_len = sizeof(addr);
+    }
+
+    // 发送数据
+    int bytes_sent = sendto(socket, send_buffer, header_len + data_len, 0, (sockaddr *)&to_addr, to_addr_len);
+    delete[] send_buffer;
+    if (bytes_sent == SOCKET_ERROR) {
+        return false;
+    }
+
+    return true;
 }
 
 bool Socks5Client::performHandshake(SOCKET sock) {
@@ -236,29 +335,54 @@ bool Socks5Client::receiveConnectResponse(SOCKET sock) {
     return true;
 }
 
-SOCKET Socks5Client::associateUdp(const std::string &socks5_addr, uint16_t socks5_port, const std::string &client_addr, uint16_t client_port,
-                                  std::string &udp_addr, uint16_t &udp_port) {
-    SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock == INVALID_SOCKET) {
+bool Socks5Client::associateUdp() {
+    socks5_control_socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (socks5_control_socket_ == INVALID_SOCKET) {
         qDebug() << "创建SOCKS5客户端套接字失败: " << WSAGetLastError();
-        return INVALID_SOCKET;
+        return false;
+    }
+
+    if (!local_address.empty() && local_port > 0) {
+        sockaddr_in client_addr;
+        client_addr.sin_family = AF_INET;
+        client_addr.sin_port = htons(local_port);
+        if (inet_pton(AF_INET, local_address.c_str(), &client_addr.sin_addr) != 1) {
+            qDebug() << "无效的本地地址: " << QString::fromStdString(local_address);
+            closesocket(socks5_control_socket_);
+            socks5_control_socket_ = INVALID_SOCKET;
+            return false;
+        }
+
+        if (bind(socks5_control_socket_, (SOCKADDR *)&client_addr, sizeof(client_addr)) == SOCKET_ERROR) {
+            qDebug() << "绑定SOCKS5客户端套接字失败: " << WSAGetLastError();
+            closesocket(socks5_control_socket_);
+            socks5_control_socket_ = INVALID_SOCKET;
+            return false;
+        }
     }
 
     sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(socks5_port);
-    inet_pton(AF_INET, socks5_addr.c_str(), &server_addr.sin_addr);
-
-    if (connect(sock, (SOCKADDR *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        qDebug() << "连接SOCKS5服务器失败: " << WSAGetLastError();
-        closesocket(sock);
-        return INVALID_SOCKET;
+    server_addr.sin_port = htons(server_port);
+    if (inet_pton(AF_INET, server_address.c_str(), &server_addr.sin_addr) != 1) {
+        qDebug() << "无效的SOCKS5服务器地址: " << QString::fromStdString(server_address);
+        closesocket(socks5_control_socket_);
+        socks5_control_socket_ = INVALID_SOCKET;
+        return false;
     }
 
-    if (!performHandshake(sock)) {
+    if (connect(socks5_control_socket_, (SOCKADDR *)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
+        qDebug() << "连接SOCKS5服务器失败: " << WSAGetLastError();
+        closesocket(socks5_control_socket_);
+        socks5_control_socket_ = INVALID_SOCKET;
+        return false;
+    }
+
+    if (!performHandshake(socks5_control_socket_)) {
         qDebug() << "SOCKS5握手失败";
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(socks5_control_socket_);
+        socks5_control_socket_ = INVALID_SOCKET;
+        return false;
     }
 
     // 发送UDP关联请求
@@ -273,30 +397,33 @@ SOCKET Socks5Client::associateUdp(const std::string &socks5_addr, uint16_t socks
     request[2] = 0x00; // Reserved
     request[3] = 0x01; // Address type: IPv4. 客户端希望SOCKS5服务器用于向客户端发送UDP数据报的地址。
                        // 通常客户端会请求 0.0.0.0:0，让服务器自己决定。
-    inet_pton(AF_INET, client_addr.c_str(), &request[4]);
-    *(uint16_t *)&request[8] = htons(client_port);
+    inet_pton(AF_INET, "0.0.0.0", &request[4]);
+    *(uint16_t *)&request[8] = htons(0);
 
-    if (send(sock, request, sizeof(request), 0) == SOCKET_ERROR) {
+    if (send(socks5_control_socket_, request, sizeof(request), 0) == SOCKET_ERROR) {
         qDebug() << "发送SOCKS5 UDP关联请求失败: " << WSAGetLastError();
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(socks5_control_socket_);
+        socks5_control_socket_ = INVALID_SOCKET;
+        return false;
     }
 
     // 接收UDP关联响应
     char response[256];
-    int len = recv(sock, response, sizeof(response), 0);
+    int len = recv(socks5_control_socket_, response, sizeof(response), 0);
 
     // 响应的最小长度是10 (IPv4)
     if (len < 10) {
         qDebug() << "接收SOCKS5 UDP关联响应失败, 响应过短: " << len;
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(socks5_control_socket_);
+        socks5_control_socket_ = INVALID_SOCKET;
+        return false;
     }
 
     if (response[1] != 0x00) { // 检查是否成功
         qDebug() << "SOCKS5 UDP关联请求被拒绝，状态码: " << (int)response[1];
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(socks5_control_socket_);
+        socks5_control_socket_ = INVALID_SOCKET;
+        return false;
     }
 
     // 提取UDP中继地址和端口
@@ -304,41 +431,42 @@ SOCKET Socks5Client::associateUdp(const std::string &socks5_addr, uint16_t socks
     if (atyp == 0x01) { // IPv4
         if (len < 10) {
             qDebug() << "IPv4响应长度不足";
-            closesocket(sock);
-            return INVALID_SOCKET;
+            closesocket(socks5_control_socket_);
+            socks5_control_socket_ = INVALID_SOCKET;
+            return false;
         }
         char ip_str[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &response[4], ip_str, INET_ADDRSTRLEN);
-        udp_addr = ip_str;
-        udp_port = ntohs(*(uint16_t *)&response[8]);
+        socks5_udp_relay_addr_ = ip_str;
+        socks5_udp_relay_port_ = ntohs(*(uint16_t *)&response[8]);
     } else if (atyp == 0x04) { // IPv6
         if (len < 22) {
             qDebug() << "IPv6响应长度不足";
-            closesocket(sock);
-            return INVALID_SOCKET;
+            closesocket(socks5_control_socket_);
+            socks5_control_socket_ = INVALID_SOCKET;
+            return false;
         }
         char ip_str[INET6_ADDRSTRLEN];
         inet_ntop(AF_INET6, &response[4], ip_str, INET6_ADDRSTRLEN);
-        udp_addr = ip_str;
-        udp_port = ntohs(*(uint16_t *)&response[20]);
+        socks5_udp_relay_addr_ = ip_str;
+        socks5_udp_relay_port_ = ntohs(*(uint16_t *)&response[20]);
     } else if (atyp == 0x03) { // 域名
         unsigned char domain_len = response[4];
         if (len < 5 + domain_len + 2) {
             qDebug() << "域名响应长度不足";
-            closesocket(sock);
-            return INVALID_SOCKET;
+            closesocket(socks5_control_socket_);
+            socks5_control_socket_ = INVALID_SOCKET;
+            return false;
         }
-        udp_addr = std::string(&response[5], domain_len);
-        udp_port = ntohs(*(uint16_t *)&response[5 + domain_len]);
+        socks5_udp_relay_addr_ = std::string(&response[5], domain_len);
+        socks5_udp_relay_port_ = ntohs(*(uint16_t *)&response[5 + domain_len]);
     } else {
         qDebug() << "未知的地址类型: " << (int)atyp;
-        closesocket(sock);
-        return INVALID_SOCKET;
+        closesocket(socks5_control_socket_);
+        socks5_control_socket_ = INVALID_SOCKET;
+        return false;
     }
-
-    // UDP关联成功，返回TCP控制连接的套接字。
-    // 调用者需要保持此连接以维持UDP关联，并在结束时关闭它。
-    return sock;
+    return true;
 }
 
 size_t Socks5Client::constructSocks5UdpHeader(char *header, const std::string &target_addr, uint16_t target_port, bool is_ipv6) {

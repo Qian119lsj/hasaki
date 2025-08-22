@@ -1,7 +1,7 @@
 #include "hasaki/mainwindow.h"
 
 #include "hasaki/settingsdialog.h"
-#include "hasaki/socks5serverdialog.h"
+#include "hasaki/upstreamdialog.h"
 #include "hasaki/udptestdialog.h"
 #include "hasaki/delayed_delete_manager.h"
 #include "hasaki/tcp_session_manager.h"
@@ -46,9 +46,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     portProcessMonitor_->startMonitoring();
 
     // 初始化SOCKS5服务器下拉框
-    socks5ServerComboBox_ = ui->socks5ServerComboBox;
-    updateSocks5ServerComboBox();
-    connect(ui->socks5ServerComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::on_socks5ServerComboBox_currentIndexChanged);
+    upstreamComboBox_ = ui->upstreamComboBox;
+    updateUpstreamComboBox();
+    connect(ui->upstreamComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::on_upstreamComboBox_currentIndexChanged);
 
     // 初始化UDP会话更新定时器
     udpSessionUpdateTimer_ = new QTimer(this);
@@ -107,50 +107,52 @@ void MainWindow::on_actionSettings_triggered() {
     }
 }
 
-void MainWindow::on_actionAddSocks5Server_triggered() {
-    Socks5ServerDialog dialog(this);
+void MainWindow::on_actionAddUpstream_triggered() {
+    UpstreamDialog dialog(this);
 
     if (dialog.exec() == QDialog::Accepted) {
-        QString name = dialog.getServerName();
-        QString address = dialog.getServerAddress();
-        int port = dialog.getServerPort();
-
-        if (!name.isEmpty() && !address.isEmpty() && port > 0) {
-            appSettings_->addSocks5Server(name, address, port);
-            appSettings_->setCurrentSocks5Server(name);
-            updateSocks5ServerComboBox();
-        }
+        hasaki::upstream_data upstream;
+        upstream.name = dialog.getName();
+        upstream.type = dialog.getType();
+        upstream.address = dialog.getAddress();
+        upstream.port = dialog.getPort();
+        upstream.username = dialog.getUserName();
+        upstream.password = dialog.getPassword();
+        upstream.encryption_method = dialog.getEncryptionMethod();
+        appSettings_->addUpstream(upstream);
+        appSettings_->setCurrentUpstream(dialog.getName());
+        updateUpstreamComboBox();
     }
 }
 
-void MainWindow::updateSocks5ServerComboBox() {
-    ui->socks5ServerComboBox->clear();
+void MainWindow::updateUpstreamComboBox() {
+    ui->upstreamComboBox->clear();
 
-    QList<Socks5Server> servers = appSettings_->getSocks5Servers();
-    QString currentServer = appSettings_->getCurrentSocks5Server();
+    QList<hasaki::upstream_data> servers = appSettings_->getUpstreams();
+    QString currentServer = appSettings_->getCurrentUpstreamName();
     int currentIndex = 0;
 
     for (int i = 0; i < servers.size(); ++i) {
-        ui->socks5ServerComboBox->addItem(servers[i].name);
+        ui->upstreamComboBox->addItem(servers[i].name);
         if (servers[i].name == currentServer) {
             currentIndex = i;
         }
     }
 
-    if (ui->socks5ServerComboBox->count() > 0) {
-        ui->socks5ServerComboBox->setCurrentIndex(currentIndex);
+    if (ui->upstreamComboBox->count() > 0) {
+        ui->upstreamComboBox->setCurrentIndex(currentIndex);
     }
 
     // 如果正在运行，禁用下拉框
-    ui->socks5ServerComboBox->setEnabled(!is_running_);
-    ui->editServerButton->setEnabled(!is_running_);
-    ui->deleteServerButton->setEnabled(!is_running_);
+    ui->upstreamComboBox->setEnabled(!is_running_);
+    ui->editUpstreamButton->setEnabled(!is_running_);
+    ui->deleteUpstreamButton->setEnabled(!is_running_);
 }
 
-void MainWindow::on_socks5ServerComboBox_currentIndexChanged(int index) {
+void MainWindow::on_upstreamComboBox_currentIndexChanged(int index) {
     if (index >= 0) {
-        QString serverName = socks5ServerComboBox_->itemText(index);
-        appSettings_->setCurrentSocks5Server(serverName);
+        QString serverName = upstreamComboBox_->itemText(index);
+        appSettings_->setCurrentUpstream(serverName);
     }
 }
 
@@ -266,10 +268,19 @@ void MainWindow::startForwarding() {
     int proxyPort = appSettings_->getProxyServerPort();
 
     // 获取当前选中的SOCKS5服务器信息
-    QPair<QString, int> socks5Info = appSettings_->getCurrentSocks5ServerInfo();
-    QString socks5Address = socks5Info.first;
-    int socks5Port = socks5Info.second;
-    proxyServer_->setSocks5Server(socks5Address.toStdString(), static_cast<uint16_t>(socks5Port));
+    hasaki::upstream_data upstreamInfo = appSettings_->getCurrentUpstream();
+    upstream_client_ = new hasaki::upstream_client();
+    upstream_client_->address = upstreamInfo.address.toStdString();
+    upstream_client_->port = upstreamInfo.port;
+    upstream_client_->type = upstreamInfo.type;
+    upstream_client_->username = upstreamInfo.username.toStdString();
+    upstream_client_->password = upstreamInfo.password.toStdString();
+    upstream_client_->encryption_method = upstreamInfo.encryption_method.toStdString();
+    if(!upstream_client_->init()){
+        ui->statusbar->showMessage("错误: 初始化SOCKS5客户端失败", 5000);
+        return;
+    }
+    proxyServer_->setUpstreamClient(upstream_client_);
     if (!proxyServer_->start(proxyPort, 8)) {
         ui->statusbar->showMessage("错误: 启动代理服务器失败", 5000);
         packetForwarder_->stop();
@@ -288,9 +299,9 @@ void MainWindow::startForwarding() {
     is_running_ = true;
     ui->startButton->setEnabled(false);
     ui->stopButton->setEnabled(true);
-    ui->socks5ServerComboBox->setEnabled(false); // 启动后禁用SOCKS5服务器选择
-    ui->editServerButton->setEnabled(false);     // 启动后禁用编辑按钮
-    ui->deleteServerButton->setEnabled(false);   // 启动后禁用删除按钮
+    ui->upstreamComboBox->setEnabled(false); // 启动后禁用服务器选择
+    ui->editUpstreamButton->setEnabled(false);     // 启动后禁用编辑按钮
+    ui->deleteUpstreamButton->setEnabled(false);   // 启动后禁用删除按钮
     ui->statusbar->showMessage("服务运行中");
 
     // 启动后立即更新一次UDP会话表格和状态栏
@@ -310,9 +321,9 @@ void MainWindow::stopForwarding() {
     is_running_ = false;
     ui->startButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
-    ui->socks5ServerComboBox->setEnabled(true); // 停止后启用SOCKS5服务器选择
-    ui->editServerButton->setEnabled(true);     // 停止后启用编辑按钮
-    ui->deleteServerButton->setEnabled(true);   // 停止后启用删除按钮
+    ui->upstreamComboBox->setEnabled(true); // 停止后启用服务器选择
+    ui->editUpstreamButton->setEnabled(true);     // 停止后启用编辑按钮
+    ui->deleteUpstreamButton->setEnabled(true);   // 停止后启用删除按钮
     ui->statusbar->showMessage("服务已停止");
 
     // 停止后更新状态栏
@@ -323,16 +334,16 @@ void MainWindow::on_startButton_clicked() { startForwarding(); }
 
 void MainWindow::on_stopButton_clicked() { stopForwarding(); }
 
-void MainWindow::on_editServerButton_clicked() {
-    if (ui->socks5ServerComboBox->count() == 0) {
+void MainWindow::on_editUpstreamButton_clicked() {
+    if (ui->upstreamComboBox->count() == 0) {
         return;
     }
 
-    QString currentServerName = ui->socks5ServerComboBox->currentText();
-    QList<Socks5Server> servers = appSettings_->getSocks5Servers();
+    QString currentServerName = ui->upstreamComboBox->currentText();
+    QList<hasaki::upstream_data> servers = appSettings_->getUpstreams();
 
     // 查找当前选中的服务器
-    Socks5Server currentServer;
+    hasaki::upstream_data currentServer;
     bool found = false;
     for (const auto &server : servers) {
         if (server.name == currentServerName) {
@@ -347,28 +358,56 @@ void MainWindow::on_editServerButton_clicked() {
     }
 
     // 创建编辑对话框
-    Socks5ServerDialog dialog(this);
-    dialog.setWindowTitle("编辑SOCKS5服务器");
-    dialog.setServerName(currentServer.name);
-    dialog.setServerAddress(currentServer.address);
-    dialog.setServerPort(currentServer.port);
+    UpstreamDialog dialog(this);
+    dialog.setWindowTitle("编辑上游服务器");
+    dialog.setName(currentServer.name);
+    dialog.setType(currentServer.type);
+    dialog.setAddress(currentServer.address);
+    dialog.setPort(currentServer.port);
+    dialog.setUserName(currentServer.username);
+    dialog.setPassword(currentServer.password);
+    dialog.setEncryptionMethod(currentServer.encryption_method);
 
     if (dialog.exec() == QDialog::Accepted) {
-        QString newName = dialog.getServerName();
-        QString address = dialog.getServerAddress();
-        int port = dialog.getServerPort();
+        QString newName = dialog.getName();
+        QString address = dialog.getAddress();
+        int port = dialog.getPort();
 
         if (!newName.isEmpty() && !address.isEmpty() && port > 0) {
             // 如果名称改变了，需要先删除旧的服务器
             if (newName != currentServerName) {
-                appSettings_->removeSocks5Server(currentServerName);
+                appSettings_->removeUpstream(currentServerName);
             }
 
             // 添加或更新服务器
-            appSettings_->addSocks5Server(newName, address, port);
-            appSettings_->setCurrentSocks5Server(newName);
-            updateSocks5ServerComboBox();
+            hasaki::upstream_data upstream{.name = newName,
+                                           .type = dialog.getType(),
+                                           .address = address,
+                                           .port = port,
+                                           .username = dialog.getUserName(),
+                                           .password = dialog.getPassword(),
+                                           .encryption_method = dialog.getEncryptionMethod()};
+            appSettings_->addUpstream(upstream);
+            appSettings_->setCurrentUpstream(newName);
+            updateUpstreamComboBox();
         }
+    }
+}
+
+void MainWindow::on_deleteUpstreamButton_clicked() {
+    if (ui->upstreamComboBox->count() <= 1) {
+        QMessageBox::warning(this, "警告", "至少需要保留一个上游服务器");
+        return;
+    }
+
+    QString currentServerName = ui->upstreamComboBox->currentText();
+
+    QMessageBox::StandardButton reply;
+    reply = QMessageBox::question(this, "确认删除", QString("确定要删除服务器 '%1' 吗?").arg(currentServerName), QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        appSettings_->removeUpstream(currentServerName);
+        updateUpstreamComboBox();
     }
 }
 
@@ -377,26 +416,9 @@ void MainWindow::on_actionUdpTest_triggered() {
     dialog.exec();
 }
 
-void MainWindow::on_actionConsoleWindow_triggered() { 
-    console_manager::toggle(); 
+void MainWindow::on_actionConsoleWindow_triggered() {
+    console_manager::toggle();
     qDebug() << "Toggle Console button clicked. Current console window handle:" << GetConsoleWindow();
-}
-
-void MainWindow::on_deleteServerButton_clicked() {
-    if (ui->socks5ServerComboBox->count() <= 1) {
-        QMessageBox::warning(this, "警告", "至少需要保留一个SOCKS5服务器");
-        return;
-    }
-
-    QString currentServerName = ui->socks5ServerComboBox->currentText();
-
-    QMessageBox::StandardButton reply;
-    reply = QMessageBox::question(this, "确认删除", QString("确定要删除服务器 '%1' 吗?").arg(currentServerName), QMessageBox::Yes | QMessageBox::No);
-
-    if (reply == QMessageBox::Yes) {
-        appSettings_->removeSocks5Server(currentServerName);
-        updateSocks5ServerComboBox();
-    }
 }
 
 void MainWindow::initializeAdapterIpMap() {

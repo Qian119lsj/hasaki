@@ -33,6 +33,15 @@ void console_manager::show() {
         std::clog.clear();
         std::cerr.clear();
         std::cin.clear();
+
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hOut == INVALID_HANDLE_VALUE) return;
+    
+        DWORD dwMode = 0;
+        if (!GetConsoleMode(hOut, &dwMode)) return;
+    
+        dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+        SetConsoleMode(hOut, dwMode);
     }
 
     // 使用 ShowWindow 来显示它

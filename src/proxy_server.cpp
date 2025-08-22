@@ -7,14 +7,12 @@
 #include <qlogging.h>
 #include "hasaki/mainwindow.h"
 #include "hasaki/udp_session_manager.h"
-#include "hasaki/socks5_client.h"
 #include "hasaki/tcp_session_manager.h"
 
 #pragma comment(lib, "ws2_32.lib")
 
 ProxyServer::ProxyServer(EndpointMapper *endpoint_mapper)
-    : endpoint_mapper_(endpoint_mapper), is_running_(false), iocp_handle_(nullptr), tcp_listen_socket_(INVALID_SOCKET), socks5_control_socket_(INVALID_SOCKET),
-      lpfn_acceptex_(nullptr) {
+    : endpoint_mapper_(endpoint_mapper), is_running_(false), iocp_handle_(nullptr), tcp_listen_socket_(INVALID_SOCKET), lpfn_acceptex_(nullptr) {
     // 使用UdpSessionManager单例
     udp_session_manager_ = hasaki::UdpSessionManager::getInstance();
     tcp_session_manager_ = hasaki::TcpSessionManager::getInstance();
@@ -22,11 +20,7 @@ ProxyServer::ProxyServer(EndpointMapper *endpoint_mapper)
 
 ProxyServer::~ProxyServer() { stop(); }
 
-void ProxyServer::setSocks5Server(const std::string &address, uint16_t port) {
-    socks5_address_ = address;
-    socks5_port_ = port;
-    qDebug() << "SOCKS5服务器设置为: " << QString::fromStdString(address) << ":" << port;
-}
+void ProxyServer::setUpstreamClient(hasaki::upstream_client *upstream_client) { upstream_client_ = upstream_client; }
 
 void ProxyServer::setAdapterIpMap(const QMap<QString, int> &adapter_ip_map) { adapter_ip_map_ = adapter_ip_map; }
 
@@ -36,8 +30,8 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
 
     udp_session_manager_->start();
 
-    if (socks5_address_.empty() || socks5_port_ == 0) {
-        qDebug() << "错误: 未设置SOCKS5服务器地址和端口";
+    if (upstream_client_ == nullptr) {
+        qDebug() << "错误: 未设置上游客户端";
         return false;
     }
 
@@ -47,18 +41,10 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
         return true;
     }
 
-    // 初始化Winsock
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        qDebug() << "WSAStartup失败";
-        return false;
-    }
-
     // 创建IOCP
     iocp_handle_ = CreateIoCompletionPort(INVALID_HANDLE_VALUE, nullptr, 0, 0);
     if (iocp_handle_ == nullptr) {
         qDebug() << "创建IOCP失败: " << GetLastError();
-        WSACleanup();
         return false;
     }
 
@@ -67,7 +53,6 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
     if (tcp_listen_socket_ == INVALID_SOCKET) {
         qDebug() << "创建监听套接字失败: " << WSAGetLastError();
         CloseHandle(iocp_handle_);
-        WSACleanup();
         return false;
     }
 
@@ -76,7 +61,6 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
         qDebug() << "setsockopt IPV6_V6ONLY 失败: " << WSAGetLastError();
         closesocket(tcp_listen_socket_);
         CloseHandle(iocp_handle_);
-        WSACleanup();
         return false;
     }
 
@@ -85,7 +69,6 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
         qDebug() << "setsockopt SO_REUSEADDR 失败: " << WSAGetLastError();
         closesocket(tcp_listen_socket_);
         CloseHandle(iocp_handle_);
-        WSACleanup();
         return false;
     }
 
@@ -100,7 +83,6 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
         qDebug() << "绑定套接字失败: " << WSAGetLastError();
         closesocket(tcp_listen_socket_);
         CloseHandle(iocp_handle_);
-        WSACleanup();
         return false;
     }
 
@@ -109,16 +91,6 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
         qDebug() << "监听失败: " << WSAGetLastError();
         closesocket(tcp_listen_socket_);
         CloseHandle(iocp_handle_);
-        WSACleanup();
-        return false;
-    }
-
-    // 请求SOCKS5 UDP关联
-    socks5_control_socket_ = Socks5Client::associateUdp(socks5_address_, socks5_port_, "0.0.0.0", 0, socks5_udp_relay_addr_, socks5_udp_relay_port_);
-    if (socks5_control_socket_ == INVALID_SOCKET) {
-        qDebug() << "SOCKS5 UDP关联失败";
-        CloseHandle(iocp_handle_);
-        WSACleanup();
         return false;
     }
 
@@ -130,7 +102,6 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
         qDebug() << "加载AcceptEx失败: " << WSAGetLastError();
         closesocket(tcp_listen_socket_);
         CloseHandle(iocp_handle_);
-        WSACleanup();
         return false;
     }
 
@@ -139,7 +110,6 @@ bool ProxyServer::start(uint16_t port, uint16_t worker_threads) {
         qDebug() << "关联监听套接字到IOCP失败: " << GetLastError();
         closesocket(tcp_listen_socket_);
         CloseHandle(iocp_handle_);
-        WSACleanup();
         return false;
     }
 
@@ -191,16 +161,9 @@ void ProxyServer::stop() {
         tcp_listen_socket_ = INVALID_SOCKET;
     }
 
-    // 关闭SOCKS5控制套接字
-    if (socks5_control_socket_ != INVALID_SOCKET) {
-        closesocket(socks5_control_socket_);
-        socks5_control_socket_ = INVALID_SOCKET;
-    }
-
     tcp_session_manager_->clearAllSessions();
     udp_session_manager_->shutdown();
 
-    WSACleanup();
     qDebug() << "代理服务器已停止";
 }
 
@@ -320,11 +283,10 @@ bool ProxyServer::handle_tcp_accept(PerIOContext *io_context) {
         return false;
     }
 
-    // 通过SOCKS5代理连接到目标
-    SOCKET target_socket = Socks5Client::connectTarget(socks5_address_, socks5_port_, target_addr, target_port);
-
-    if (target_socket == INVALID_SOCKET) {
-        qDebug() << "无法通过SOCKS5连接到目标: " << QString::fromStdString(target_addr) << ":" << target_port;
+    // 通过上游代理连接到目标
+    SOCKET target_socket = INVALID_SOCKET;
+    if (!upstream_client_->connect_to_remote(target_socket, target_addr, target_port)) {
+        qDebug() << "无法通过上游代理连接到目标: " << QString::fromStdString(target_addr) << ":" << target_port;
         closesocket(client_socket);
         delete io_context;
         if (is_running_) {
@@ -421,25 +383,29 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
         delete io_context;
         return false;
     }
-    // 创建发送上下文
+
     PerIOContext *send_context = new PerIOContext();
-    send_context->socket = peer_socket;
     send_context->operation = IO_SEND_TCP;
     send_context->tcp_session = tcp_session;
 
-    // 复制数据
-    memcpy(send_context->buffer, io_context->buffer, bytes_transferred);
-    send_context->wsa_buf.len = bytes_transferred;
+    if (upstream_client_->type == hasaki::SOCKS5) { 
+        // 直接转发
+        
+        memcpy(send_context->buffer, io_context->buffer, bytes_transferred);
+        send_context->wsa_buf.len = bytes_transferred;
 
-    // 发送数据
-    if (WSASend(send_context->socket, &send_context->wsa_buf, 1, nullptr, 0, &send_context->overlapped, nullptr) == SOCKET_ERROR) {
-        if (WSAGetLastError() != WSA_IO_PENDING) {
-            qDebug() << "WSASend失败: " << WSAGetLastError() << " socket_type: " << io_context->socket_type;
-            delete send_context;
-            delete io_context;
-            tcp_session_manager_->removeSession(tcp_session->mapper_key_);
-            return false;
+        if (WSASend(peer_socket, &send_context->wsa_buf, 1, nullptr, 0, &send_context->overlapped, nullptr) == SOCKET_ERROR) {
+            if (WSAGetLastError() != WSA_IO_PENDING) {
+                qDebug() << "WSASend失败: " << WSAGetLastError() << " socket_type: " << io_context->socket_type;
+                delete send_context;
+                delete io_context;
+                tcp_session_manager_->removeSession(tcp_session->mapper_key_);
+                return false;
+            }
         }
+    }else if(upstream_client_->type == hasaki::SHADOWSOCKS_2022){
+        // 加解密后转发
+        
     }
 
     // 继续接收
@@ -458,7 +424,6 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
 }
 
 void ProxyServer::handle_udp_receive(std::shared_ptr<hasaki::UdpSession> udp_session, DWORD bytes_transferred) {
-    // qDebug() << "handle_udp_receive";
     udp_session->update_activity_time();
     auto io_context = udp_session->io_context.get();
     const char *data = io_context->buffer;
@@ -687,32 +652,12 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
         return false;
     }
 
-    // 构造SOCKS5 UDP请求头
-    char header[512];
-    size_t header_len = Socks5Client::constructSocks5UdpHeader(header, dst_ip, dst_port, is_ipv6);
-    if (header_len == 0) {
-        qDebug() << "构造SOCKS5 UDP请求头失败";
-        return false;
-    }
-
-    // 创建完整数据包
-    char *send_buffer = new char[header_len + packet_len];
-    memcpy(send_buffer, header, header_len);
-
-    // 只有当packet_data不为空且packet_len大于0时才复制数据
-    if (packet_data != nullptr && packet_len > 0) {
-        memcpy(send_buffer + header_len, packet_data, packet_len);
-    } else {
-        qDebug() << "收到空的UDP数据包";
-    }
-
-    // 发送数据到SOCKS5服务器
-    bool result = sendToSocks5Server(session, send_buffer, header_len + packet_len);
+    // 发送数据上游服务器
+    bool result = upstream_client_->sendToRemote(session->local_socket, packet_data, packet_len, dst_ip, dst_port, is_ipv6);
 
     if (!result) {
-        qDebug() << "发送UDP数据到SOCKS5服务器失败: " << WSAGetLastError() << "remote_addr: " << dst_ip << ":" << dst_port;
+        qDebug() << "发送UDP数据到上游服务器失败: " << WSAGetLastError() << "remote_addr: " << dst_ip << ":" << dst_port;
     }
-    delete[] send_buffer;
 
     if (is_new_session) {
         // 将UDP套接字关联到IOCP
@@ -728,45 +673,4 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
         post_udp_recv(session);
     }
     return result;
-}
-
-bool ProxyServer::sendToSocks5Server(const std::shared_ptr<hasaki::UdpSession> &session, const char *data, size_t data_len) {
-    if (!session || session->local_socket == INVALID_SOCKET) {
-        return false;
-    }
-
-    // 创建目标地址
-    sockaddr_storage to_addr;
-    int to_addr_len = 0;
-
-    if (socks5_udp_relay_addr_.find(':') != std::string::npos) {
-        // IPv6地址
-        sockaddr_in6 addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin6_family = AF_INET6;
-        inet_pton(AF_INET6, socks5_udp_relay_addr_.c_str(), &addr.sin6_addr);
-        addr.sin6_port = htons(socks5_udp_relay_port_);
-
-        memcpy(&to_addr, &addr, sizeof(addr));
-        to_addr_len = sizeof(addr);
-    } else {
-        // IPv4地址
-        sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_family = AF_INET;
-        inet_pton(AF_INET, socks5_udp_relay_addr_.c_str(), &addr.sin_addr);
-        addr.sin_port = htons(socks5_udp_relay_port_);
-
-        memcpy(&to_addr, &addr, sizeof(addr));
-        to_addr_len = sizeof(addr);
-    }
-
-    // 发送数据
-    int bytes_sent = sendto(session->local_socket, data, data_len, 0, (sockaddr *)&to_addr, to_addr_len);
-
-    if (bytes_sent == SOCKET_ERROR) {
-        return false;
-    }
-
-    return true;
 }
