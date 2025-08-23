@@ -60,7 +60,7 @@ jobs:
       shell: pwsh
       run: |
         $assetName = "hasaki-${{ github.ref_name }}-windows.zip"
-        $assetPath = "D:/a/hasaki/hasaki/out/install/msvc-ci/bin"
+        $assetPath = "out/install/msvc-ci/bin"
         7z a $assetName $assetPath/*
         echo "ASSET_NAME=$assetName" >> $env:GITHUB_ENV
 
@@ -75,4 +75,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: hasaki-windows-build-raw
-        path: build/${{env.BUILD_TYPE}}/
+        path: out/install/msvc-ci/bin
