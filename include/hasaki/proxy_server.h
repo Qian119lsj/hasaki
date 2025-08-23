@@ -15,13 +15,15 @@
 #include <atomic>
 #include <memory>
 #include <QMap>
+#include <QObject>
+#include <QTimer>
 
 namespace hasaki {
+
 struct UdpSession;
 struct TcpSession;
 class UdpSessionManager;
 class TcpSessionManager;
-} // namespace hasaki
 
 // IO操作类型
 enum IO_OPERATION {
@@ -73,10 +75,34 @@ struct PerIOContext {
     operator LPOVERLAPPED() { return &overlapped; }
 };
 
+
+// 流量统计结构
+struct TrafficStats {
+    uint64_t total_bytes_sent = 0;     // 总发送字节数
+    uint64_t total_bytes_received = 0; // 总接收字节数
+    uint64_t tcp_bytes_sent = 0;       // TCP发送字节数
+    uint64_t tcp_bytes_received = 0;   // TCP接收字节数
+    uint64_t udp_bytes_sent = 0;       // UDP发送字节数
+    uint64_t udp_bytes_received = 0;   // UDP接收字节数
+};
+
+// 每秒流量统计
+struct SpeedStats {
+    uint64_t bytes_per_second_sent = 0;     // 每秒发送字节数
+    uint64_t bytes_per_second_received = 0; // 每秒接收字节数
+    uint64_t tcp_speed_sent = 0;            // TCP每秒发送
+    uint64_t tcp_speed_received = 0;        // TCP每秒接收
+    uint64_t udp_speed_sent = 0;            // UDP每秒发送
+    uint64_t udp_speed_received = 0;        // UDP每秒接收
+};
+
+
 // 代理服务器类
-class ProxyServer {
+class ProxyServer : public QObject {
+    Q_OBJECT
+
 public:
-    ProxyServer(EndpointMapper *endpoint_mapper);
+    ProxyServer(EndpointMapper *endpoint_mapper, QObject *parent = nullptr);
     ~ProxyServer();
 
     void setUpstreamClient(hasaki::upstream_client *upstream_client);
@@ -84,6 +110,7 @@ public:
     void setUdpPacketInjector(hasaki::UdpPacketInjector *udp_packet_injector);
 
     uint16_t getPort() const { return port_; }
+    
     // 启动代理服务器
     bool start(uint16_t port, uint16_t worker_threads = 4);
 
@@ -92,8 +119,11 @@ public:
 
     // 处理UDP数据包
     bool handleUdpPacket(const char *packet_data, uint packet_len, const std::string &src_ip, uint16_t src_port, const std::string &dst_ip, uint16_t dst_port,
-                         bool is_ipv6);
+                         bool is_ipv6, std::string& process_name);
 
+    // 获取统计数据的接口
+    TrafficStats getTrafficStats() const;
+    SpeedStats getCurrentSpeed() const;
 private:
     // 工作线程函数
     void worker_thread_func();
@@ -144,4 +174,34 @@ private:
     SOCKET tcp_listen_socket_ = INVALID_SOCKET;
     HANDLE iocp_handle_ = nullptr;
     LPFN_ACCEPTEX lpfn_acceptex_ = nullptr;
+
+    SpeedStats current_speed_;
+
+    // 内部原子统计结构
+    struct AtomicTrafficStats {
+        std::atomic<uint64_t> total_bytes_sent{0};
+        std::atomic<uint64_t> total_bytes_received{0};
+        std::atomic<uint64_t> tcp_bytes_sent{0};
+        std::atomic<uint64_t> tcp_bytes_received{0};
+        std::atomic<uint64_t> udp_bytes_sent{0};
+        std::atomic<uint64_t> udp_bytes_received{0};
+    } atomic_traffic_stats_;
+
+     // 上一秒的流量值，用于计算速度
+    uint64_t last_total_sent_ = 0;
+    uint64_t last_total_received_ = 0;
+    uint64_t last_tcp_sent_ = 0;
+    uint64_t last_tcp_received_ = 0;
+    uint64_t last_udp_sent_ = 0;
+    uint64_t last_udp_received_ = 0;
+    
+    // 统计更新定时器
+    QTimer* stats_timer_;
+    
+    // 统计方法
+    void updateTrafficStats(uint64_t bytes, bool is_sent, bool is_tcp);
+    void calculateSpeed();
+    void resetTrafficStats(); // 重置流量统计
 };
+
+} // namespace hasaki

@@ -1,12 +1,14 @@
 #include "hasaki/proxy_server.h"
 
 #include <QDebug>
+#include <QTimer>
 #include <WinSock2.h>
 #include <minwindef.h>
 #include <qcontainerfwd.h>
 #include <qdebug.h>
 #include <QHostAddress>
 #include <qlogging.h>
+#include <string>
 #include <ws2tcpip.h>
 #include "hasaki/mainwindow.h"
 #include "hasaki/udp_session_manager.h"
@@ -14,14 +16,29 @@
 
 #pragma comment(lib, "ws2_32.lib")
 
-ProxyServer::ProxyServer(EndpointMapper *endpoint_mapper)
-    : endpoint_mapper_(endpoint_mapper), is_running_(false), iocp_handle_(nullptr), tcp_listen_socket_(INVALID_SOCKET), lpfn_acceptex_(nullptr) {
+using namespace hasaki;
+
+ProxyServer::ProxyServer(EndpointMapper *endpoint_mapper, QObject *parent)
+    : QObject(parent), endpoint_mapper_(endpoint_mapper), is_running_(false), iocp_handle_(nullptr), tcp_listen_socket_(INVALID_SOCKET),
+      lpfn_acceptex_(nullptr) {
     // 使用UdpSessionManager单例
     udp_session_manager_ = hasaki::UdpSessionManager::getInstance();
     tcp_session_manager_ = hasaki::TcpSessionManager::getInstance();
+
+    // 初始化流量统计定时器
+    stats_timer_ = new QTimer();
+    QObject::connect(stats_timer_, &QTimer::timeout, this, &ProxyServer::calculateSpeed);
+    stats_timer_->start(1000); // 每秒更新一次速率统计
 }
 
-ProxyServer::~ProxyServer() { stop(); }
+ProxyServer::~ProxyServer() {
+    if (stats_timer_) {
+        stats_timer_->stop();
+        delete stats_timer_;
+        stats_timer_ = nullptr;
+    }
+    stop();
+}
 
 void ProxyServer::setUpstreamClient(hasaki::upstream_client *upstream_client) { upstream_client_ = upstream_client; }
 
@@ -166,6 +183,9 @@ void ProxyServer::stop() {
 
     tcp_session_manager_->clearAllSessions();
     udp_session_manager_->shutdown();
+
+    // 清空流量统计数据
+    resetTrafficStats();
 
     qDebug() << "代理服务器已停止";
 }
@@ -381,7 +401,16 @@ bool ProxyServer::handle_tcp_accept(PerIOContext *io_context) {
 
 bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_transferred) {
     auto tcp_session = io_context->tcp_session;
-    SOCKET peer_socket = (io_context->socket_type == CLIENT_SOCKET) ? tcp_session->target_socket : tcp_session->client_socket;
+    SOCKET peer_socket = INVALID_SOCKET;
+    if (io_context->socket_type == CLIENT_SOCKET) {
+        // 统计TCP发送流量
+        updateTrafficStats(bytes_transferred, true, true);
+        peer_socket = tcp_session->target_socket;
+    } else {
+        // 统计TCP接收流量
+        updateTrafficStats(bytes_transferred, false, true);
+        peer_socket = tcp_session->client_socket;
+    }
 
     if (peer_socket == INVALID_SOCKET) {
         qDebug() << "对端套接字无效";
@@ -430,6 +459,9 @@ bool ProxyServer::handle_tcp_receive(PerIOContext *io_context, DWORD bytes_trans
 void ProxyServer::handle_udp_receive(PerIOContext *io_context, DWORD bytes_transferred) {
     auto udp_session = io_context->udp_session;
     udp_session->update_activity_time();
+
+    // 统计UDP接收流量（从上游服务器返回）
+    updateTrafficStats(bytes_transferred, false, false);
 
     const char *data = io_context->buffer;
     std::vector<char> response;
@@ -563,6 +595,7 @@ bool ProxyServer::get_tcp_connection_target(SOCKET socket, std::string &target_a
 }
 
 bool ProxyServer::handle_tcp_send(PerIOContext *io_context, DWORD bytes_transferred) {
+
     // 发送完成，删除上下文
     delete io_context;
     return true;
@@ -621,14 +654,14 @@ void ProxyServer::post_udp_recv(std::shared_ptr<hasaki::UdpSession> udp_session)
 
 // 客户端->上游服务器
 bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, const std::string &src_ip, uint16_t src_port, const std::string &dst_ip,
-                                  uint16_t dst_port, bool is_ipv6) {
+                                  uint16_t dst_port, bool is_ipv6, std::string &process_name) {
 
     // 获取或创建会话
     bool is_new_session = false;
 
     // 创建会话键
     std::string session_key = hasaki::UdpSessionManager::createSessionKey(src_ip, src_port);
-    auto session = udp_session_manager_->getOrCreateSession(session_key, src_ip, src_port, dst_ip, dst_port, is_ipv6, &is_new_session);
+    auto session = udp_session_manager_->getOrCreateSession(session_key, src_ip, src_port, dst_ip, dst_port, is_ipv6, process_name, &is_new_session);
     if (!session) {
         qDebug() << "创建UDP会话失败";
         return false;
@@ -683,6 +716,9 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
         return false;
     }
 
+    // 统计UDP发送流量（客户端到上游服务器）
+    updateTrafficStats(packet_len, true, false);
+
     if (is_new_session) {
         // 将UDP套接字关联到IOCP
         if (CreateIoCompletionPort((HANDLE)session->local_socket, iocp_handle_, 0, 0) == nullptr) {
@@ -696,4 +732,94 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
     }
 
     return true;
+}
+
+// 更新流量统计
+void ProxyServer::updateTrafficStats(uint64_t bytes, bool is_sent, bool is_tcp) {
+    if (is_sent) {
+        // 发送流量统计
+        atomic_traffic_stats_.total_bytes_sent += bytes;
+        if (is_tcp) {
+            atomic_traffic_stats_.tcp_bytes_sent += bytes;
+        } else {
+            atomic_traffic_stats_.udp_bytes_sent += bytes;
+        }
+    } else {
+        // 接收流量统计
+        atomic_traffic_stats_.total_bytes_received += bytes;
+        if (is_tcp) {
+            atomic_traffic_stats_.tcp_bytes_received += bytes;
+        } else {
+            atomic_traffic_stats_.udp_bytes_received += bytes;
+        }
+    }
+}
+
+// 计算每秒流量速率
+void ProxyServer::calculateSpeed() {
+    // 获取当前累计值
+    uint64_t current_total_sent = atomic_traffic_stats_.total_bytes_sent.load();
+    uint64_t current_total_received = atomic_traffic_stats_.total_bytes_received.load();
+    uint64_t current_tcp_sent = atomic_traffic_stats_.tcp_bytes_sent.load();
+    uint64_t current_tcp_received = atomic_traffic_stats_.tcp_bytes_received.load();
+    uint64_t current_udp_sent = atomic_traffic_stats_.udp_bytes_sent.load();
+    uint64_t current_udp_received = atomic_traffic_stats_.udp_bytes_received.load();
+
+    // 计算每秒流量（当前值减去上一秒的值）
+    current_speed_.bytes_per_second_sent = current_total_sent - last_total_sent_;
+    current_speed_.bytes_per_second_received = current_total_received - last_total_received_;
+    current_speed_.tcp_speed_sent = current_tcp_sent - last_tcp_sent_;
+    current_speed_.tcp_speed_received = current_tcp_received - last_tcp_received_;
+    current_speed_.udp_speed_sent = current_udp_sent - last_udp_sent_;
+    current_speed_.udp_speed_received = current_udp_received - last_udp_received_;
+
+    // 更新历史值
+    last_total_sent_ = current_total_sent;
+    last_total_received_ = current_total_received;
+    last_tcp_sent_ = current_tcp_sent;
+    last_tcp_received_ = current_tcp_received;
+    last_udp_sent_ = current_udp_sent;
+    last_udp_received_ = current_udp_received;
+}
+
+// 获取累计流量统计
+hasaki::TrafficStats ProxyServer::getTrafficStats() const {
+    hasaki::TrafficStats stats;
+    stats.total_bytes_sent = atomic_traffic_stats_.total_bytes_sent.load();
+    stats.total_bytes_received = atomic_traffic_stats_.total_bytes_received.load();
+    stats.tcp_bytes_sent = atomic_traffic_stats_.tcp_bytes_sent.load();
+    stats.tcp_bytes_received = atomic_traffic_stats_.tcp_bytes_received.load();
+    stats.udp_bytes_sent = atomic_traffic_stats_.udp_bytes_sent.load();
+    stats.udp_bytes_received = atomic_traffic_stats_.udp_bytes_received.load();
+    return stats;
+}
+
+// 获取当前速率统计
+hasaki::SpeedStats ProxyServer::getCurrentSpeed() const { return current_speed_; }
+
+// 重置流量统计数据
+void ProxyServer::resetTrafficStats() {
+    // 重置原子统计数据
+    atomic_traffic_stats_.total_bytes_sent.store(0);
+    atomic_traffic_stats_.total_bytes_received.store(0);
+    atomic_traffic_stats_.tcp_bytes_sent.store(0);
+    atomic_traffic_stats_.tcp_bytes_received.store(0);
+    atomic_traffic_stats_.udp_bytes_sent.store(0);
+    atomic_traffic_stats_.udp_bytes_received.store(0);
+
+    // 重置当前速率统计
+    current_speed_.bytes_per_second_sent = 0;
+    current_speed_.bytes_per_second_received = 0;
+    current_speed_.tcp_speed_sent = 0;
+    current_speed_.tcp_speed_received = 0;
+    current_speed_.udp_speed_sent = 0;
+    current_speed_.udp_speed_received = 0;
+
+    // 重置历史值
+    last_total_sent_ = 0;
+    last_total_received_ = 0;
+    last_tcp_sent_ = 0;
+    last_tcp_received_ = 0;
+    last_udp_sent_ = 0;
+    last_udp_received_ = 0;
 }

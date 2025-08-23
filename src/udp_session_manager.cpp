@@ -2,6 +2,7 @@
 #include "hasaki/port_process_monitor.h"
 #include <QDebug>
 #include <sstream>
+#include <string>
 
 namespace hasaki {
 
@@ -57,7 +58,8 @@ std::string UdpSessionManager::createSessionKey(const std::string &client_ip, ui
 }
 
 std::shared_ptr<UdpSession> UdpSessionManager::getOrCreateSession(const std::string &session_key, const std::string &client_ip, uint16_t client_port,
-                                                                  const std::string &dest_ip, uint16_t dest_port, bool is_ipv6, bool *is_new_session) {
+                                                                  const std::string &dest_ip, uint16_t dest_port, bool is_ipv6, std::string process_name,
+                                                                  bool *is_new_session) {
 
     // 查找现有会话
     {
@@ -72,6 +74,7 @@ std::shared_ptr<UdpSession> UdpSessionManager::getOrCreateSession(const std::str
 
     // 创建新会话
     auto session = std::make_shared<UdpSession>();
+    session->process_name = process_name;
     session->client_ip = client_ip;
     session->client_port = client_port;
     session->mapper_key_ = session_key;
@@ -95,7 +98,7 @@ void UdpSessionManager::cleanup_task() {
                     // 检查端口是否在portProcessMonitor_的映射中
                     if (portProcessMonitor_) {
                         // 只有当端口不在portProcessMonitor_的映射中时才加入清理列表
-                        if (!portProcessMonitor_->isPortInTargetProcess(session->client_port)) {
+                        if (!portProcessMonitor_->isPortInTargetProcess(session->client_port, nullptr)) {
                             keys_to_remove.push_back(key);
                         }
                     }

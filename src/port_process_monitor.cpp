@@ -62,14 +62,16 @@ void PortProcessMonitor::setBlacklistProcessNames(const QSet<QString> &processNa
 
 void PortProcessMonitor::setBlacklistMode(bool enabled) { QMutexLocker locker(&m_mutex); }
 
-bool PortProcessMonitor::isPortInTargetProcess(quint16 port) const {
+bool PortProcessMonitor::isPortInTargetProcess(quint16 port, std::string *process_name) const {
     QMutexLocker locker(&m_mutex);
     if (!m_portToProcessName.contains(port)) {
         return false;
     }
 
     const QString processName = m_portToProcessName.value(port);
-
+    if (process_name != nullptr) {
+        *process_name = processName.toStdString();
+    }
     // 转发决策逻辑
     // 在黑名单模式下，如果在黑名单中，则一定不转发
     if (m_blacklistProcessNames.contains(processName)) {
