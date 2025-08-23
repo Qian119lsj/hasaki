@@ -123,11 +123,11 @@ hasaki/
 
 ## 📄 许可证
 
-本项目采用 **GPL v2** 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
+本项目采用 **GPL v3** 许可证 - 详情请参阅 [LICENSE](LICENSE) 文件。
 
 ### 第三方库许可证
 
-- **WinDivert**: 双重许可（LGPL v3 或 GPL v2）- 我们选择 LGPL v3 兼容许可
+- **WinDivert**: 双重许可（LGPL v3 或 GPL v2
 - **Qt Framework**: LGPL v3（开源版本）
 - **其他依赖**: 各自遵循相应的开源许可证
 
