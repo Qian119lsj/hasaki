@@ -84,6 +84,15 @@
             }
         },
         {
+            "name": "msvc-ci",
+            "inherits": "msvc-base",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT_}/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_PREFIX_PATH": "$env{QT_ROOT_DIR}",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
             "name": "msvc-debug-asan",
             "inherits": "msvc-debug",
             "binaryDir": "${sourceDir}/out/build/msvc-debug-asan",
@@ -120,6 +129,10 @@
         {
             "name": "build-msvc-release",
             "configurePreset": "msvc-release"
+        },
+        {
+            "name": "build-msvc-ci",
+            "configurePreset": "msvc-ci"
         },
         {
             "name": "build-msvc-debug-asan",

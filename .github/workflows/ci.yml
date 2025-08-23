@@ -35,19 +35,19 @@ jobs:
         
     - name: Configure CMake
       shell: bash
-      run: cmake -B build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
+      run: cmake --preset clang-release
 
     - name: Build
-      run: cmake --build build --config ${{env.BUILD_TYPE}} --parallel
+      run: cmake --build --preset build-clang-release
       
-    - name: Deploy Qt Dependencies
-      run: windeployqt --release build/${{env.BUILD_TYPE}}/hasaki.exe
+    - name: Install
+      run: cmake --install out/build/clang-release --prefix out/install/clang-release
 
     - name: Archive release files
       shell: pwsh
       run: |
         $assetName = "hasaki-${{ github.ref_name }}-windows.zip"
-        $assetPath = "build/${{env.BUILD_TYPE}}"
+        $assetPath = "out/install/clang-release"
         7z a $assetName $assetPath/*
         echo "ASSET_NAME=$assetName" >> $env:GITHUB_ENV
 
