@@ -79,7 +79,6 @@ private:
 
     QSet<QString> m_targetProcessNames;
     QSet<QString> m_blacklistProcessNames;
-    bool m_isBlacklistMode = false;
     QHash<quint16, QString> m_portToProcessName;
     QHash<quint16, uint64_t> m_portExpirationTime; // 端口过期时间映射
     QSet<DWORD> m_blacklistedPids; // 进程ID黑名单, 用于忽略自身等

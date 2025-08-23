@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <cstdio>
+#include <qicon.h>
 
 void customMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg) {
     Q_UNUSED(context);
@@ -52,17 +53,25 @@ int main(int argc, char *argv[]) {
     qInstallMessageHandler(customMessageHandler);
 
     QApplication a(argc, argv);
+
+    QIcon icon(":/icons/app.ico");
+    QApplication::setWindowIcon(icon);
+
     QCoreApplication::setApplicationName("hasaki");
+
     MainWindow w;
     w.show();
+
     WSADATA wsaData;
     int ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
     if (ret != 0) {
         qDebug() << "WSAStartup 失败:" << ret;
         return ret;
     }
+
     int result = a.exec();
 
     WSACleanup();
+
     return result;
 }

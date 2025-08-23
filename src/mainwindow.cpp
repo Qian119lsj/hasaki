@@ -3,20 +3,24 @@
 #include "hasaki/settingsdialog.h"
 #include "hasaki/upstreamdialog.h"
 #include "hasaki/udptestdialog.h"
+#include "hasaki/process_preset_dialog.h"
 #include "hasaki/delayed_delete_manager.h"
 #include "hasaki/tcp_session_manager.h"
 #include "hasaki/console_manager.h"
 #include "ui_mainwindow.h"
 
+#include <QApplication>
 #include <QHeaderView>
 #include <QMessageBox>
 #include <QNetworkInterface>
 #include <QHostAddress>
 #include <QDebug>
+#include <qapplication.h>
 #include <qdebug.h>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
+    createTrayIcon();
 
     // 初始化网络适配器IP映射
     initializeAdapterIpMap();
@@ -42,15 +46,21 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     proxyServer_->setUdpPacketInjector(udpPacketInjector_);
 
     // 设置初始状态
-    portProcessMonitor_->setTargetProcessNames(appSettings_->getTargetProcessNames());
-    portProcessMonitor_->setBlacklistProcessNames(appSettings_->getBlacklistProcessNames());
-    portProcessMonitor_->setBlacklistMode(appSettings_->isBlacklistEnabled());
+    ProcessPreset currentPreset = appSettings_->getCurrentProcessPreset();
+    portProcessMonitor_->setTargetProcessNames(currentPreset.processNames);
+    portProcessMonitor_->setBlacklistProcessNames(currentPreset.blacklistProcessNames);
+    portProcessMonitor_->setBlacklistMode(true); // 默认启用黑名单模式
     portProcessMonitor_->startMonitoring();
 
     // 初始化上游服务器下拉框
     upstreamComboBox_ = ui->upstreamComboBox;
     updateUpstreamComboBox();
     connect(ui->upstreamComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::on_upstreamComboBox_currentIndexChanged);
+
+    // 初始化进程预设下拉框
+    processPresetComboBox_ = ui->processPresetComboBox;
+    updateProcessPresetComboBox();
+    connect(ui->processPresetComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::on_processPresetComboBox_currentIndexChanged);
 
     // 初始化UDP会话更新定时器
     udpSessionUpdateTimer_ = new QTimer(this);
@@ -91,11 +101,50 @@ MainWindow::~MainWindow() {
     delete ui;
 }
 
+void MainWindow::createTrayIcon() {
+    trayIcon_ = new QSystemTrayIcon(this);
+    trayIcon_->setIcon(QIcon(":/icons/app.ico"));
+    trayIcon_->setToolTip("Hasaki");
+    trayIconMenu_ = new QMenu(this);
+    showAction_ = new QAction("显示主窗口", this);
+    quitAction_ = new QAction("退出", this);
+    trayIconMenu_->addAction(showAction_);
+    trayIconMenu_->addSeparator();
+    trayIconMenu_->addAction(quitAction_);
+    trayIcon_->setContextMenu(trayIconMenu_);
+
+    connect(showAction_, &QAction::triggered, this, &QWidget::show);
+    connect(quitAction_, &QAction::triggered, this, &QApplication::quit);
+
+    connect(trayIcon_, &QSystemTrayIcon::activated, this, &MainWindow::onTrayIconActivated);
+    trayIcon_->show();
+    trayIcon_->showMessage("Hasaki", "Hasaki已启动并在托盘运行", QSystemTrayIcon::Information, 3000);
+}
+
+void MainWindow::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason) {
+    switch (reason) {
+    case QSystemTrayIcon::Trigger:
+    case QSystemTrayIcon::DoubleClick:
+        this->showNormal();
+        this->raise();
+        this->activateWindow();
+        break;
+    default:
+        break;
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+    if (trayIcon_->isVisible()) {
+        this->hide();
+        event->ignore();
+    } else {
+        event->accept();
+    }
+}
+
 void MainWindow::on_actionSettings_triggered() {
     SettingsDialog dialog(this);
-    dialog.setProcessNames(appSettings_->getTargetProcessNames());
-    dialog.setBlacklistEnabled(appSettings_->isBlacklistEnabled());
-    dialog.setBlacklistProcessNames(appSettings_->getBlacklistProcessNames());
     dialog.setProxyPort(appSettings_->getProxyServerPort());
     dialog.setEnableIpv6(appSettings_->isIpv6Enabled());
 
@@ -153,6 +202,38 @@ void MainWindow::updateUpstreamComboBox() {
     ui->deleteUpstreamButton->setEnabled(!is_running_);
 }
 
+void MainWindow::updateProcessPresetComboBox() {
+    ui->processPresetComboBox->clear();
+
+    QList<ProcessPreset> presets = appSettings_->getProcessPresets();
+    QString currentPreset = appSettings_->getCurrentProcessPresetName();
+    int currentIndex = 0;
+
+    for (int i = 0; i < presets.size(); ++i) {
+        ui->processPresetComboBox->addItem(presets[i].name);
+        if (presets[i].name == currentPreset) {
+            currentIndex = i;
+        }
+    }
+
+    if (ui->processPresetComboBox->count() > 0) {
+        ui->processPresetComboBox->setCurrentIndex(currentIndex);
+    }
+
+    // 如果正在运行，禁用相关按钮
+    ui->addProcessPresetButton->setEnabled(!is_running_);
+    ui->editProcessPresetButton->setEnabled(!is_running_);
+    ui->deleteProcessPresetButton->setEnabled(!is_running_);
+    ui->copyProcessPresetButton->setEnabled(!is_running_);
+}
+
+void MainWindow::applyProcessPreset(const ProcessPreset &preset) {
+    // 应用预设到监控器
+    portProcessMonitor_->setTargetProcessNames(preset.processNames);
+    portProcessMonitor_->setBlacklistProcessNames(preset.blacklistProcessNames);
+    portProcessMonitor_->setBlacklistMode(true); // 默认启用黑名单模式
+}
+
 void MainWindow::on_upstreamComboBox_currentIndexChanged(int index) {
     if (index >= 0) {
         QString serverName = upstreamComboBox_->itemText(index);
@@ -164,17 +245,9 @@ void MainWindow::applySettingsFromDialog(SettingsDialog *dialog) {
     if (!dialog)
         return;
 
-    // 保存所有设置
-    appSettings_->setTargetProcessNames(dialog->getProcessNames());
-    appSettings_->setBlacklistEnabled(dialog->isBlacklistEnabled());
-    appSettings_->setBlacklistProcessNames(dialog->getBlacklistProcessNames());
+    // 保存设置
     appSettings_->setProxyServerPort(dialog->getProxyPort());
     appSettings_->setIpv6Enabled(dialog->isIpv6Enabled());
-
-    // 应用到监控器
-    portProcessMonitor_->setTargetProcessNames(dialog->getProcessNames());
-    portProcessMonitor_->setBlacklistProcessNames(dialog->getBlacklistProcessNames());
-    portProcessMonitor_->setBlacklistMode(dialog->isBlacklistEnabled());
 
     // 应用IPv6设置到PacketForwarder
     packetForwarder_->setEnableIpv6(dialog->isIpv6Enabled());
@@ -255,16 +328,11 @@ void MainWindow::startForwarding() {
         return;
     }
 
-    QSet<QString> targetProcesses = appSettings_->getTargetProcessNames();
-    if (targetProcesses.isEmpty()) {
-        ui->statusbar->showMessage("错误: 未配置目标进程", 5000);
-        return;
-    }
+    ProcessPreset currentPreset = appSettings_->getCurrentProcessPreset();
+    // 黑名单模式默认启用，不需要检查processNames是否为空
 
-    // 启动时确保监控器状态与设置一致
-    portProcessMonitor_->setTargetProcessNames(targetProcesses);
-    portProcessMonitor_->setBlacklistProcessNames(appSettings_->getBlacklistProcessNames());
-    portProcessMonitor_->setBlacklistMode(appSettings_->isBlacklistEnabled());
+    // 启动时确保监控器状态与预设一致
+    applyProcessPreset(currentPreset);
 
     // 设置IPv6状态
     packetForwarder_->setEnableIpv6(appSettings_->isIpv6Enabled());
@@ -282,7 +350,7 @@ void MainWindow::startForwarding() {
     upstream_client_->username = upstreamInfo.username.toStdString();
     upstream_client_->password = upstreamInfo.password.toStdString();
     upstream_client_->encryption_method = upstreamInfo.encryption_method.toStdString();
-    if(!upstream_client_->init()){
+    if (!upstream_client_->init()) {
         ui->statusbar->showMessage("错误: 初始化SOCKS5客户端失败", 5000);
         return;
     }
@@ -305,9 +373,15 @@ void MainWindow::startForwarding() {
     is_running_ = true;
     ui->startButton->setEnabled(false);
     ui->stopButton->setEnabled(true);
-    ui->upstreamComboBox->setEnabled(false); // 启动后禁用服务器选择
-    ui->editUpstreamButton->setEnabled(false);     // 启动后禁用编辑按钮
-    ui->deleteUpstreamButton->setEnabled(false);   // 启动后禁用删除按钮
+    ui->upstreamComboBox->setEnabled(false);     // 启动后禁用服务器选择
+    ui->editUpstreamButton->setEnabled(false);   // 启动后禁用编辑按钮
+    ui->deleteUpstreamButton->setEnabled(false); // 启动后禁用删除按钮
+    // 禁用预设相关按钮
+    ui->processPresetComboBox->setEnabled(false);
+    ui->addProcessPresetButton->setEnabled(false);
+    ui->editProcessPresetButton->setEnabled(false);
+    ui->deleteProcessPresetButton->setEnabled(false);
+    ui->copyProcessPresetButton->setEnabled(false);
     ui->statusbar->showMessage("服务运行中");
 
     // 启动后立即更新一次UDP会话表格和状态栏
@@ -327,9 +401,15 @@ void MainWindow::stopForwarding() {
     is_running_ = false;
     ui->startButton->setEnabled(true);
     ui->stopButton->setEnabled(false);
-    ui->upstreamComboBox->setEnabled(true); // 停止后启用服务器选择
-    ui->editUpstreamButton->setEnabled(true);     // 停止后启用编辑按钮
-    ui->deleteUpstreamButton->setEnabled(true);   // 停止后启用删除按钮
+    ui->upstreamComboBox->setEnabled(true);     // 停止后启用服务器选择
+    ui->editUpstreamButton->setEnabled(true);   // 停止后启用编辑按钮
+    ui->deleteUpstreamButton->setEnabled(true); // 停止后启用删除按钮
+    // 启用预设相关按钮
+    ui->processPresetComboBox->setEnabled(true);
+    ui->addProcessPresetButton->setEnabled(true);
+    ui->editProcessPresetButton->setEnabled(true);
+    ui->deleteProcessPresetButton->setEnabled(true);
+    ui->copyProcessPresetButton->setEnabled(true);
     ui->statusbar->showMessage("服务已停止");
 
     // 停止后更新状态栏
@@ -346,7 +426,8 @@ void MainWindow::on_editUpstreamButton_clicked() {
     }
 
     hasaki::upstream_data currentServer = appSettings_->getCurrentUpstream();
-    qDebug() << "当前服务器信息: " << currentServer.name << currentServer.type << currentServer.address << currentServer.port << currentServer.local_address << currentServer.local_port << currentServer.username << currentServer.password << currentServer.encryption_method;
+    qDebug() << "当前服务器信息: " << currentServer.name << currentServer.type << currentServer.address << currentServer.port << currentServer.local_address
+             << currentServer.local_port << currentServer.username << currentServer.password << currentServer.encryption_method;
 
     // 创建编辑对话框
     UpstreamDialog dialog(this);
@@ -457,5 +538,120 @@ void MainWindow::initializeAdapterIpMap() {
                          << "类型:" << (addr.protocol() == QAbstractSocket::IPv4Protocol ? "IPv4" : "IPv6");
             }
         }
+    }
+}
+
+void MainWindow::on_processPresetComboBox_currentIndexChanged(int index) {
+    if (index >= 0) {
+        QString presetName = processPresetComboBox_->itemText(index);
+        appSettings_->setCurrentProcessPreset(presetName);
+
+        // 应用选中的预设
+        ProcessPreset preset = appSettings_->getCurrentProcessPreset();
+        applyProcessPreset(preset);
+    }
+}
+
+void MainWindow::on_addProcessPresetButton_clicked() {
+    ProcessPresetDialog dialog(this);
+    dialog.setEditMode(false);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        ProcessPreset preset = dialog.getPreset();
+
+        // 检查名称是否已存在
+        QList<ProcessPreset> existingPresets = appSettings_->getProcessPresets();
+        for (const ProcessPreset &existing : existingPresets) {
+            if (existing.name == preset.name) {
+                QMessageBox::warning(this, "警告", "预设名称已存在，请使用不同的名称");
+                return;
+            }
+        }
+
+        appSettings_->addOrUpdateProcessPreset(preset);
+        appSettings_->setCurrentProcessPreset(preset.name);
+        updateProcessPresetComboBox();
+
+        // 应用新预设
+        applyProcessPreset(preset);
+    }
+}
+
+void MainWindow::on_editProcessPresetButton_clicked() {
+    if (ui->processPresetComboBox->count() == 0) {
+        return;
+    }
+
+    ProcessPreset currentPreset = appSettings_->getCurrentProcessPreset();
+
+    ProcessPresetDialog dialog(this);
+    dialog.setEditMode(true);
+    dialog.setPreset(currentPreset);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        ProcessPreset updatedPreset = dialog.getPreset();
+        appSettings_->addOrUpdateProcessPreset(updatedPreset);
+        updateProcessPresetComboBox();
+
+        // 应用更新后的预设
+        applyProcessPreset(updatedPreset);
+    }
+}
+
+void MainWindow::on_deleteProcessPresetButton_clicked() {
+    if (ui->processPresetComboBox->count() <= 1) {
+        QMessageBox::warning(this, "警告", "至少需要保留一个进程预设");
+        return;
+    }
+
+    QString currentPresetName = ui->processPresetComboBox->currentText();
+
+    QMessageBox::StandardButton reply =
+        QMessageBox::question(this, "确认删除", QString("是否确认删除预设 '%1'?").arg(currentPresetName), QMessageBox::Yes | QMessageBox::No);
+
+    if (reply == QMessageBox::Yes) {
+        appSettings_->removeProcessPreset(currentPresetName);
+        updateProcessPresetComboBox();
+
+        // 应用新的当前预设
+        ProcessPreset newCurrentPreset = appSettings_->getCurrentProcessPreset();
+        applyProcessPreset(newCurrentPreset);
+    }
+}
+
+void MainWindow::on_copyProcessPresetButton_clicked() {
+    if (ui->processPresetComboBox->count() == 0) {
+        return;
+    }
+
+    ProcessPreset currentPreset = appSettings_->getCurrentProcessPreset();
+
+    ProcessPresetDialog dialog(this);
+    dialog.setEditMode(false); // 新增模式
+    dialog.setWindowTitle("复制进程预设");
+
+    // 填充除了预设名称外的当前设置
+    ProcessPreset copyPreset = currentPreset;
+    copyPreset.name = ""; // 清空名称，让用户输入新名称
+    dialog.setPreset(copyPreset);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        ProcessPreset newPreset = dialog.getPreset();
+
+        // 检查名称是否已存在
+        QList<ProcessPreset> existingPresets = appSettings_->getProcessPresets();
+        for (const ProcessPreset &existing : existingPresets) {
+            if (existing.name == newPreset.name) {
+                QMessageBox::warning(this, "警告", "预设名称已存在，请使用不同的名称");
+                return;
+            }
+        }
+
+        appSettings_->addOrUpdateProcessPreset(newPreset);
+        appSettings_->setCurrentProcessPreset(newPreset.name);
+        updateProcessPresetComboBox();
+
+        // 应用新预设
+        applyProcessPreset(newPreset);
     }
 }

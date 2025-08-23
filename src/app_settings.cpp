@@ -8,7 +8,7 @@
 #include <QJsonDocument>
 #include <QStandardPaths>
 
-AppSettings::AppSettings(QObject* parent) : QObject(parent) {
+AppSettings::AppSettings(QObject *parent) : QObject(parent) {
     m_configFilePath = getConfigFilePath();
     ensureConfigFileExists();
 }
@@ -33,7 +33,7 @@ void AppSettings::ensureConfigFileExists() const {
         QJsonObject root;
         root["TargetProcesses"] = QJsonArray();
         root["ProxyServerPort"] = 998;
-        
+
         // 初始化SOCKS5服务器列表
         QJsonArray socks5Servers;
         QJsonObject defaultServer;
@@ -43,10 +43,20 @@ void AppSettings::ensureConfigFileExists() const {
         socks5Servers.append(defaultServer);
         root["Socks5Servers"] = socks5Servers;
         root["CurrentSocks5Server"] = "默认";
-        
+
         // 默认启用IPv6
         root["EnableIpv6"] = true;
-        
+
+        // 初始化进程预设
+        QJsonArray presets;
+        QJsonObject defaultPreset;
+        defaultPreset["name"] = "默认预设";
+        defaultPreset["processNames"] = QJsonArray();
+        defaultPreset["blacklistProcessNames"] = QJsonArray();
+        presets.append(defaultPreset);
+        root["ProcessPresets"] = presets;
+        root["CurrentProcessPreset"] = "默认预设";
+
         writeJsonObject(root);
     }
 }
@@ -62,7 +72,7 @@ QJsonObject AppSettings::readJsonObject() const {
     return doc.object();
 }
 
-void AppSettings::writeJsonObject(const QJsonObject& json) const {
+void AppSettings::writeJsonObject(const QJsonObject &json) const {
     QFile file(m_configFilePath);
     if (!file.open(QIODevice::WriteOnly)) {
         qWarning() << "Could not open config file for writing:" << m_configFilePath;
@@ -72,68 +82,59 @@ void AppSettings::writeJsonObject(const QJsonObject& json) const {
     file.close();
 }
 
-
 QSet<QString> AppSettings::getTargetProcessNames() const {
     QSet<QString> processNames;
-    QJsonObject   root  = readJsonObject();
+    QJsonObject root = readJsonObject();
     if (root.contains("TargetProcesses") && root["TargetProcesses"].isArray()) {
         QJsonArray array = root["TargetProcesses"].toArray();
-        for (const auto& value : array) {
+        for (const auto &value : array) {
             processNames.insert(value.toString());
         }
     }
     return processNames;
 }
 
-void AppSettings::setTargetProcessNames(const QSet<QString>& processNames) {
+void AppSettings::setTargetProcessNames(const QSet<QString> &processNames) {
     QJsonObject root = readJsonObject();
-    QJsonArray  array;
-    for (const QString& name : processNames) {
+    QJsonArray array;
+    for (const QString &name : processNames) {
         array.append(name);
     }
     root["TargetProcesses"] = array;
     writeJsonObject(root);
 }
 
-bool AppSettings::isBlacklistEnabled() const
-{
-    return readJsonObject().value("BlacklistEnabled").toBool(false);
-}
+bool AppSettings::isBlacklistEnabled() const { return readJsonObject().value("BlacklistEnabled").toBool(false); }
 
-void AppSettings::setBlacklistEnabled(bool enabled)
-{
+void AppSettings::setBlacklistEnabled(bool enabled) {
     QJsonObject root = readJsonObject();
     root["BlacklistEnabled"] = enabled;
     writeJsonObject(root);
 }
 
-QSet<QString> AppSettings::getBlacklistProcessNames() const
-{
+QSet<QString> AppSettings::getBlacklistProcessNames() const {
     QSet<QString> processNames;
-    QJsonObject   root  = readJsonObject();
+    QJsonObject root = readJsonObject();
     if (root.contains("BlacklistProcessNames") && root["BlacklistProcessNames"].isArray()) {
         QJsonArray array = root["BlacklistProcessNames"].toArray();
-        for (const auto& value : array) {
+        for (const auto &value : array) {
             processNames.insert(value.toString());
         }
     }
     return processNames;
 }
 
-void AppSettings::setBlacklistProcessNames(const QSet<QString>& processNames)
-{
+void AppSettings::setBlacklistProcessNames(const QSet<QString> &processNames) {
     QJsonObject root = readJsonObject();
-    QJsonArray  array;
-    for (const QString& name : processNames) {
+    QJsonArray array;
+    for (const QString &name : processNames) {
         array.append(name);
     }
     root["BlacklistProcessNames"] = array;
     writeJsonObject(root);
 }
 
-int AppSettings::getProxyServerPort() const {
-    return readJsonObject().value("ProxyServerPort").toInt(998);
-}
+int AppSettings::getProxyServerPort() const { return readJsonObject().value("ProxyServerPort").toInt(998); }
 
 void AppSettings::setProxyServerPort(int port) {
     QJsonObject root = readJsonObject();
@@ -144,10 +145,10 @@ void AppSettings::setProxyServerPort(int port) {
 QList<hasaki::upstream_data> AppSettings::getUpstreams() const {
     QList<hasaki::upstream_data> upstreams;
     QJsonObject root = readJsonObject();
-    
+
     if (root.contains("upstreams") && root["upstreams"].isArray()) {
         QJsonArray array = root["upstreams"].toArray();
-        for (const auto& value : array) {
+        for (const auto &value : array) {
             if (value.isObject()) {
                 QJsonObject serverObj = value.toObject();
                 hasaki::upstream_data upstream;
@@ -167,15 +168,15 @@ QList<hasaki::upstream_data> AppSettings::getUpstreams() const {
     return upstreams;
 }
 
-void AppSettings::addOrUpdateUpstream(const hasaki::upstream_data& upstream) {
+void AppSettings::addOrUpdateUpstream(const hasaki::upstream_data &upstream) {
     QJsonObject root = readJsonObject();
     QJsonArray serversArray;
-    
+
     // 读取现有服务器
     if (root.contains("upstreams") && root["upstreams"].isArray()) {
         serversArray = root["upstreams"].toArray();
     }
-    
+
     // 检查是否已存在同名服务器，如果存在则更新
     bool found = false;
     for (int i = 0; i < serversArray.size(); ++i) {
@@ -194,7 +195,7 @@ void AppSettings::addOrUpdateUpstream(const hasaki::upstream_data& upstream) {
             break;
         }
     }
-    
+
     // 如果不存在，添加新服务器
     if (!found) {
         QJsonObject newServer;
@@ -209,18 +210,18 @@ void AppSettings::addOrUpdateUpstream(const hasaki::upstream_data& upstream) {
         newServer["encryption_method"] = upstream.encryption_method;
         serversArray.append(newServer);
     }
-    
+
     root["upstreams"] = serversArray;
     writeJsonObject(root);
 }
 
-void AppSettings::removeUpstream(const QString& name) {
+void AppSettings::removeUpstream(const QString &name) {
     QJsonObject root = readJsonObject();
-    
+
     if (root.contains("upstreams") && root["upstreams"].isArray()) {
         QJsonArray serversArray = root["upstreams"].toArray();
         QJsonArray newArray;
-        
+
         // 复制除了要删除的服务器外的所有服务器
         for (int i = 0; i < serversArray.size(); ++i) {
             QJsonObject serverObj = serversArray[i].toObject();
@@ -228,12 +229,12 @@ void AppSettings::removeUpstream(const QString& name) {
                 newArray.append(serverObj);
             }
         }
-        
+
         // 如果删除的是当前选中的服务器，更新当前服务器
         if (getCurrentUpstreamName() == name) {
             root["currentUpstream"] = newArray[0].toObject()["name"].toString();
         }
-        
+
         root["upstreams"] = newArray;
         writeJsonObject(root);
     }
@@ -242,11 +243,11 @@ void AppSettings::removeUpstream(const QString& name) {
 QString AppSettings::getCurrentUpstreamName() const {
     QJsonObject root = readJsonObject();
     QString currentServer = root.value("currentUpstream").toString();
-    
+
     if (currentServer.isEmpty()) {
         return "";
     }
-    
+
     return currentServer;
 }
 
@@ -255,30 +256,182 @@ hasaki::upstream_data AppSettings::getCurrentUpstream() const {
     if (name.isEmpty()) {
         return hasaki::upstream_data();
     }
-    
+
     QList<hasaki::upstream_data> servers = getUpstreams();
-    for (const hasaki::upstream_data& server : servers) {
+    for (const hasaki::upstream_data &server : servers) {
         if (server.name == name) {
             return server;
         }
     }
-    
+
     return hasaki::upstream_data();
 }
 
-
-void AppSettings::setCurrentUpstream(const QString& name) {
+void AppSettings::setCurrentUpstream(const QString &name) {
     QJsonObject root = readJsonObject();
     root["currentUpstream"] = name;
     writeJsonObject(root);
 }
 
-bool AppSettings::isIpv6Enabled() const {
-    return readJsonObject().value("EnableIpv6").toBool(true);
-}
+bool AppSettings::isIpv6Enabled() const { return readJsonObject().value("EnableIpv6").toBool(true); }
 
 void AppSettings::setIpv6Enabled(bool enabled) {
     QJsonObject root = readJsonObject();
     root["EnableIpv6"] = enabled;
     writeJsonObject(root);
-} 
+}
+
+// 进程预设相关方法实现
+QList<ProcessPreset> AppSettings::getProcessPresets() const {
+    QList<ProcessPreset> presets;
+    QJsonObject root = readJsonObject();
+
+    if (root.contains("ProcessPresets") && root["ProcessPresets"].isArray()) {
+        QJsonArray array = root["ProcessPresets"].toArray();
+        for (const auto &value : array) {
+            if (value.isObject()) {
+                presets.append(jsonToProcessPreset(value.toObject()));
+            }
+        }
+    }
+
+    // 如果没有预设，创建一个默认预设
+    if (presets.isEmpty()) {
+        ProcessPreset defaultPreset;
+        defaultPreset.name = "默认预设";
+        presets.append(defaultPreset);
+    }
+
+    return presets;
+}
+
+void AppSettings::addOrUpdateProcessPreset(const ProcessPreset &preset) {
+    QJsonObject root = readJsonObject();
+    QJsonArray presetsArray;
+
+    // 读取现有预设
+    if (root.contains("ProcessPresets") && root["ProcessPresets"].isArray()) {
+        presetsArray = root["ProcessPresets"].toArray();
+    }
+
+    // 检查是否已存在同名预设，如果存在则更新
+    bool found = false;
+    for (int i = 0; i < presetsArray.size(); ++i) {
+        QJsonObject presetObj = presetsArray[i].toObject();
+        if (presetObj["name"].toString() == preset.name) {
+            presetsArray[i] = processPresetToJson(preset);
+            found = true;
+            break;
+        }
+    }
+
+    // 如果不存在，添加新预设
+    if (!found) {
+        presetsArray.append(processPresetToJson(preset));
+    }
+
+    root["ProcessPresets"] = presetsArray;
+    writeJsonObject(root);
+}
+
+void AppSettings::removeProcessPreset(const QString &name) {
+    QJsonObject root = readJsonObject();
+
+    if (root.contains("ProcessPresets") && root["ProcessPresets"].isArray()) {
+        QJsonArray presetsArray = root["ProcessPresets"].toArray();
+        QJsonArray newArray;
+
+        // 复制除了要删除的预设外的所有预设
+        for (int i = 0; i < presetsArray.size(); ++i) {
+            QJsonObject presetObj = presetsArray[i].toObject();
+            if (presetObj["name"].toString() != name) {
+                newArray.append(presetObj);
+            }
+        }
+
+        // 如果删除的是当前选中的预设，更新当前预设
+        if (getCurrentProcessPresetName() == name && newArray.size() > 0) {
+            root["CurrentProcessPreset"] = newArray[0].toObject()["name"].toString();
+        }
+
+        root["ProcessPresets"] = newArray;
+        writeJsonObject(root);
+    }
+}
+
+QString AppSettings::getCurrentProcessPresetName() const {
+    QJsonObject root = readJsonObject();
+    QString currentPreset = root.value("CurrentProcessPreset").toString();
+
+    if (currentPreset.isEmpty()) {
+        return "默认预设";
+    }
+
+    return currentPreset;
+}
+
+void AppSettings::setCurrentProcessPreset(const QString &name) {
+    QJsonObject root = readJsonObject();
+    root["CurrentProcessPreset"] = name;
+    writeJsonObject(root);
+}
+
+ProcessPreset AppSettings::getCurrentProcessPreset() const {
+    QString name = getCurrentProcessPresetName();
+
+    QList<ProcessPreset> presets = getProcessPresets();
+    for (const ProcessPreset &preset : presets) {
+        if (preset.name == name) {
+            return preset;
+        }
+    }
+
+    // 返回默认预设
+    ProcessPreset defaultPreset;
+    defaultPreset.name = "默认预设";
+    return defaultPreset;
+}
+
+ProcessPreset AppSettings::jsonToProcessPreset(const QJsonObject &json) const {
+    ProcessPreset preset;
+    preset.name = json["name"].toString();
+
+    // 读取进程名称列表
+    if (json.contains("processNames") && json["processNames"].isArray()) {
+        QJsonArray array = json["processNames"].toArray();
+        for (const auto &value : array) {
+            preset.processNames.insert(value.toString());
+        }
+    }
+
+    // 读取黑名单进程名称列表
+    if (json.contains("blacklistProcessNames") && json["blacklistProcessNames"].isArray()) {
+        QJsonArray array = json["blacklistProcessNames"].toArray();
+        for (const auto &value : array) {
+            preset.blacklistProcessNames.insert(value.toString());
+        }
+    }
+
+    return preset;
+}
+
+QJsonObject AppSettings::processPresetToJson(const ProcessPreset &preset) const {
+    QJsonObject json;
+    json["name"] = preset.name;
+
+    // 写入进程名称列表
+    QJsonArray processArray;
+    for (const QString &name : preset.processNames) {
+        processArray.append(name);
+    }
+    json["processNames"] = processArray;
+
+    // 写入黑名单进程名称列表
+    QJsonArray blacklistArray;
+    for (const QString &name : preset.blacklistProcessNames) {
+        blacklistArray.append(name);
+    }
+    json["blacklistProcessNames"] = blacklistArray;
+
+    return json;
+}

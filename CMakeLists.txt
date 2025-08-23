@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
 project(hasaki VERSION 0.1 LANGUAGES CXX)
-
+set(CMAKE_AUTORCC ON)
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Widgets Core Network)
 message(STATUS "Found Qt version: ${Qt6_VERSION}")
 
@@ -13,7 +13,8 @@ set(SOURCES
     src/packet_forwarder.cpp
     "src/port_process_monitor.cpp"
     "src/app_settings.cpp"
-    "src/settings_dialog.cpp"
+    "src/settingsdialog.cpp"
+    src/process_preset_dialog.cpp
     src/utils.cpp
     src/proxy_server.cpp
     "src/socks5_client.cpp"
@@ -36,6 +37,7 @@ set(HEADERS
     "include/hasaki/port_process_monitor.h"
     "include/hasaki/app_settings.h"
     include/hasaki/settingsdialog.h
+    include/hasaki/process_preset_dialog.h
     include/hasaki/utils.h
     include/hasaki/proxy_server.h
     "include/hasaki/socks5_client.h"
@@ -52,6 +54,8 @@ add_executable(hasaki WIN32
     ${SOURCES}
     ${HEADERS}
     ${UIS}
+    resources.qrc
+    app.rc
 )
 
 set(WINDIVERT_DIR ${CMAKE_SOURCE_DIR}/third_party/windivert)

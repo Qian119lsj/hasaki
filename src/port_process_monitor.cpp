@@ -55,17 +55,12 @@ void PortProcessMonitor::setTargetProcessNames(const QSet<QString> &processNames
     m_targetProcessNames = processNames;
 }
 
-void PortProcessMonitor::setBlacklistProcessNames(const QSet<QString>& processNames)
-{
+void PortProcessMonitor::setBlacklistProcessNames(const QSet<QString> &processNames) {
     QMutexLocker locker(&m_mutex);
     m_blacklistProcessNames = processNames;
 }
 
-void PortProcessMonitor::setBlacklistMode(bool enabled)
-{
-    QMutexLocker locker(&m_mutex);
-    m_isBlacklistMode = enabled;
-}
+void PortProcessMonitor::setBlacklistMode(bool enabled) { QMutexLocker locker(&m_mutex); }
 
 bool PortProcessMonitor::isPortInTargetProcess(quint16 port) const {
     QMutexLocker locker(&m_mutex);
@@ -76,33 +71,30 @@ bool PortProcessMonitor::isPortInTargetProcess(quint16 port) const {
     const QString processName = m_portToProcessName.value(port);
 
     // 转发决策逻辑
-    if (m_isBlacklistMode) {
-        // 在黑名单模式下，如果在黑名单中，则一定不转发
-        if (m_blacklistProcessNames.contains(processName)) {
-            return false;
-        }
+    // 在黑名单模式下，如果在黑名单中，则一定不转发
+    if (m_blacklistProcessNames.contains(processName)) {
+        return false;
     }
-    
+
     // 最终是否转发，总是由TargetProcessNames决定
     return m_targetProcessNames.contains(processName);
 }
 
 uint64_t PortProcessMonitor::getCurrentTimeMs() const {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
 void PortProcessMonitor::cleanupExpiredMappings() {
     QMutexLocker locker(&m_mutex);
     uint64_t now = getCurrentTimeMs();
-    
+
     QList<quint16> portsToRemove;
     for (auto it = m_portExpirationTime.begin(); it != m_portExpirationTime.end(); ++it) {
         if (it.value() <= now) {
             portsToRemove.append(it.key());
         }
     }
-    
+
     bool mappingsUpdated = false;
     for (quint16 port : portsToRemove) {
         m_portToProcessName.remove(port);
@@ -110,7 +102,7 @@ void PortProcessMonitor::cleanupExpiredMappings() {
         // qDebug() << "remove port:" << port;
         mappingsUpdated = true;
     }
-    
+
     if (mappingsUpdated) {
         emit mappingsChanged();
     }
@@ -118,10 +110,10 @@ void PortProcessMonitor::cleanupExpiredMappings() {
 
 void PortProcessMonitor::processEvents(std::stop_token stop_token) {
     WINDIVERT_ADDRESS addr;
-    
+
     // 上次清理过期映射的时间
     uint64_t lastCleanupTime = getCurrentTimeMs();
-    
+
     while (!stop_token.stop_requested()) {
         // 每10秒检查一次过期映射
         uint64_t currentTime = getCurrentTimeMs();
@@ -129,7 +121,7 @@ void PortProcessMonitor::processEvents(std::stop_token stop_token) {
             cleanupExpiredMappings();
             lastCleanupTime = currentTime;
         }
-        
+
         // 接收事件
         if (!WinDivertRecv(m_handle, NULL, 0, NULL, &addr)) {
             DWORD lastError = GetLastError();
@@ -170,9 +162,8 @@ void PortProcessMonitor::handleSocketEvent(WINDIVERT_ADDRESS *addr) {
             if (processNameOpt) {
                 QString processName = QString::fromStdWString(processNameOpt.value());
 
-                // 黑名单逻辑:
-                // 如果是黑名单模式，且进程在黑名单里，则不跟踪
-                if (m_isBlacklistMode && m_blacklistProcessNames.contains(processName)) {
+                // 进程在黑名单里，则不跟踪
+                if (m_blacklistProcessNames.contains(processName)) {
                     return; // 不跟踪此进程
                 }
 
@@ -187,11 +178,11 @@ void PortProcessMonitor::handleSocketEvent(WINDIVERT_ADDRESS *addr) {
             }
         } else if (addr->Event == WINDIVERT_EVENT_SOCKET_CLOSE) {
             if (m_portToProcessName.contains(localPort)) {
-                if(socketData->Protocol == 6) {
+                if (socketData->Protocol == 6) {
                     // 不立即删除,而是标记为过期,设置250秒后删除
                     uint64_t expireTime = getCurrentTimeMs() + 250000;
                     m_portExpirationTime.insert(localPort, expireTime);
-                }else {
+                } else {
                     // UDP直接删除
                     m_portToProcessName.remove(localPort);
                     m_portExpirationTime.remove(localPort);
