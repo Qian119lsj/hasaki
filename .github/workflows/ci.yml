@@ -33,7 +33,6 @@ jobs:
         cache: true
         cache-key-prefix: 'install-qt-action'
         
-    - uses: lukka/get-cmake@latest
     - uses: lukka/run-vcpkg@v11
         
     - name: Setup MSVC environment
@@ -61,7 +60,7 @@ jobs:
       shell: pwsh
       run: |
         $assetName = "hasaki-${{ github.ref_name }}-windows.zip"
-        $assetPath = "out/install/msvc-release/bin"
+        $assetPath = "D:/a/hasaki/hasaki/out/install/msvc-ci/bin"
         7z a $assetName $assetPath/*
         echo "ASSET_NAME=$assetName" >> $env:GITHUB_ENV
 
