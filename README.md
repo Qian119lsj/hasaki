@@ -8,6 +8,8 @@
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](#系统要求)
 [![Qt](https://img.shields.io/badge/Qt-6.9.0-green.svg)](https://qt.io/)
 [![C++](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](#技术栈)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Qian119lsj/hasaki)
+
 
 </div>
 
