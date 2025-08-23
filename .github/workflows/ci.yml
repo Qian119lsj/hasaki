@@ -50,7 +50,7 @@ jobs:
     - name: Build
       env:
         VCPKG_ROOT_: ${{ github.workspace }}/vcpkg
-      run: cmake --build --preset msvc-ci
+      run: cmake --build --preset build-msvc-ci
       
     - name: Install
       env:
