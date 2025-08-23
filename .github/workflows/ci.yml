@@ -33,21 +33,36 @@ jobs:
         cache: true
         cache-key-prefix: 'install-qt-action'
         
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+        vcpkgTriplet: 'x64-linux'
+        
+    - name: Setup Ninja
+      uses: seanmiddleditch/gha-setup-ninja@v4
+      
     - name: Configure CMake
       shell: bash
-      run: cmake --preset clang-release
+      run: |
+        $env:VCPKG_ROOT_ = "${{ github.workspace }}/vcpkg"
+        cmake --preset msvc-release
 
     - name: Build
-      run: cmake --build --preset build-clang-release
+      run: |
+        $env:VCPKG_ROOT_ = "${{ github.workspace }}/vcpkg"
+        cmake --build --preset build-msvc-release
       
     - name: Install
-      run: cmake --install out/build/clang-release --prefix out/install/clang-release
+      run: |
+        $env:VCPKG_ROOT_ = "${{ github.workspace }}/vcpkg"
+        cmake --install out/build/msvc-release
 
     - name: Archive release files
       shell: pwsh
       run: |
         $assetName = "hasaki-${{ github.ref_name }}-windows.zip"
-        $assetPath = "out/install/clang-release"
+        $assetPath = "out/install/msvc-release/bin"
         7z a $assetName $assetPath/*
         echo "ASSET_NAME=$assetName" >> $env:GITHUB_ENV
 
