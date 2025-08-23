@@ -30,8 +30,7 @@ QT_END_NAMESPACE
 class AppSettings;
 class PortProcessMonitor;
 class EndpointMapper;
-class PacketForwarder;
-class ProxyServer;
+class hasakiPacketForwarder;
 class SettingsDialog;
 class ProcessPresetDialog;
 
@@ -91,6 +90,9 @@ private:
     // 进程预设相关方法
     void updateProcessPresetComboBox();
     void applyProcessPreset(const ProcessPreset &preset);
+    
+    // 流量统计相关辅助方法
+    QString formatBytes(uint64_t bytes) const;
 
     Ui::MainWindow *ui = nullptr;
     QSystemTrayIcon *trayIcon_ = nullptr;
@@ -100,9 +102,9 @@ private:
 
     AppSettings *appSettings_ = nullptr;
     PortProcessMonitor *portProcessMonitor_ = nullptr;
-    PacketForwarder *packetForwarder_ = nullptr;
+    hasaki::PacketForwarder *packetForwarder_ = nullptr;
     hasaki::upstream_client *upstream_client_ = nullptr;
-    ProxyServer *proxyServer_ = nullptr;
+    hasaki::ProxyServer *proxyServer_ = nullptr;
     EndpointMapper *endpointMapper_ = nullptr;
     hasaki::UdpSessionManager *udpSessionManager_ = nullptr; // 使用单例，但仍保留指针
     hasaki::UdpPacketInjector *udpPacketInjector_ = nullptr;
@@ -120,5 +122,5 @@ private:
     QTimer *sessionCountUpdateTimer_ = nullptr;
 
     // 状态栏标签
-    QLabel *sessionStatusLabel_ = nullptr;
+    QLabel *statusLabel_ = nullptr;
 };

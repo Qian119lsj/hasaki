@@ -26,16 +26,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     initializeAdapterIpMap();
 
     // 设置UDP会话表格
-    ui->mappingsTableWidget->setColumnCount(3);
-    ui->mappingsTableWidget->setHorizontalHeaderLabels({"客户端IP", "客户端端口", "最后活动时间"});
+    ui->mappingsTableWidget->setColumnCount(4);
+    ui->mappingsTableWidget->setHorizontalHeaderLabels({"客户端IP", "客户端端口", "最后活动时间", "进程"});
     ui->mappingsTableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
     // 初始化组件
     appSettings_ = new AppSettings(this);
     portProcessMonitor_ = new PortProcessMonitor(this);
     endpointMapper_ = EndpointMapper::getInstance();
-    packetForwarder_ = new PacketForwarder();
-    proxyServer_ = new ProxyServer(endpointMapper_);
+    packetForwarder_ = new hasaki::PacketForwarder();
+    proxyServer_ = new hasaki::ProxyServer(endpointMapper_, this);
     // 使用UdpSessionManager单例
     udpSessionManager_ = hasaki::UdpSessionManager::getInstance();
 
@@ -73,10 +73,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     sessionCountUpdateTimer_->start(1000); // 每秒更新一次
 
     // 创建状态栏标签
-    sessionStatusLabel_ = new QLabel(this);
-    sessionStatusLabel_->setAlignment(Qt::AlignRight);
-    sessionStatusLabel_->setMinimumWidth(200);
-    ui->statusbar->addPermanentWidget(sessionStatusLabel_);
+    statusLabel_ = new QLabel(this);
+    statusLabel_->setAlignment(Qt::AlignRight);
+    statusLabel_->setMinimumWidth(600); // 增加宽度以显示更多信息
+    ui->statusbar->addPermanentWidget(statusLabel_);
 
     // 初始更新一次状态栏
     updateSessionStatusBar();
@@ -97,7 +97,6 @@ MainWindow::~MainWindow() {
     sessionCountUpdateTimer_->stop();
 
     delete packetForwarder_;
-    delete proxyServer_;
     delete ui;
 }
 
@@ -268,12 +267,32 @@ void MainWindow::applySettings() {
 }
 
 void MainWindow::updateSessionStatusBar() {
-    // 获取当前TCP和UDP会话数
-    size_t tcpSessions = hasaki::TcpSessionManager::getInstance()->getSessionCount();
-    size_t udpSessions = udpSessionManager_->getSessions().size();
+    QString statusText = "";
+    if (is_running_ && proxyServer_) {
+        // 获取当前TCP和UDP会话数
+        size_t tcpSessions = hasaki::TcpSessionManager::getInstance()->getSessionCount();
+        size_t udpSessions = udpSessionManager_->getSessions().size();
+
+        // 获取流量统计数据
+        auto trafficStats = proxyServer_->getTrafficStats();
+        auto speedStats = proxyServer_->getCurrentSpeed();
+
+        // 格式化显示
+        statusText = QString("TCP: ↑ %5/s ↓ %6/s | UDP: ↑ %7/s ↓ %8/s | "
+                             "总发送: %3 | 总接收: %4 | "
+                             "会话数: TCP %1  UDP %2")
+                         .arg(tcpSessions)
+                         .arg(udpSessions)
+                         .arg(formatBytes(trafficStats.total_bytes_sent))
+                         .arg(formatBytes(trafficStats.total_bytes_received))
+                         .arg(formatBytes(speedStats.tcp_speed_sent))
+                         .arg(formatBytes(speedStats.tcp_speed_received))
+                         .arg(formatBytes(speedStats.udp_speed_sent))
+                         .arg(formatBytes(speedStats.udp_speed_received));
+    }
 
     // 更新状态栏标签
-    sessionStatusLabel_->setText(QString("TCP会话: %1 | UDP会话: %2").arg(tcpSessions).arg(udpSessions));
+    statusLabel_->setText(statusText);
 }
 
 void MainWindow::updateUdpSessionView() {
@@ -312,6 +331,7 @@ void MainWindow::updateUdpSessionView() {
         timeItem->setData(Qt::UserRole, static_cast<qint64>(elapsed));
         ui->mappingsTableWidget->setItem(row, 2, timeItem);
 
+        ui->mappingsTableWidget->setItem(row, 3, new QTableWidgetItem(QString::fromStdString(session->process_name)));
         row++;
     }
 
@@ -393,8 +413,8 @@ void MainWindow::stopForwarding() {
     if (!is_running_) {
         return;
     }
-    proxyServer_->stop();
     packetForwarder_->stop();
+    proxyServer_->stop();
     DelayedDeleteManager::getInstance()->clearAllTasks();
     endpointMapper_->clearAllMappings();
 
@@ -653,5 +673,22 @@ void MainWindow::on_copyProcessPresetButton_clicked() {
 
         // 应用新预设
         applyProcessPreset(newPreset);
+    }
+}
+
+// 格式化字节数为可读单位
+QString MainWindow::formatBytes(uint64_t bytes) const {
+    const double KB = 1024.0;
+    const double MB = KB * 1024.0;
+    const double GB = MB * 1024.0;
+
+    if (bytes >= GB) {
+        return QString("%1 GB").arg(bytes / GB, 0, 'f', 2);
+    } else if (bytes >= MB) {
+        return QString("%1 MB").arg(bytes / MB, 0, 'f', 2);
+    } else if (bytes >= KB) {
+        return QString("%1 KB").arg(bytes / KB, 0, 'f', 2);
+    } else {
+        return QString("%1 B").arg(bytes);
     }
 }

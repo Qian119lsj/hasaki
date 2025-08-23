@@ -4,10 +4,12 @@
 #include "hasaki/mainwindow.h"
 
 #include <QDebug>
+#include <string>
 
 #define BATCH_SIZE 64
 #define PACKET_BUFFER_SIZE (BATCH_SIZE * 1500)
 
+using namespace hasaki;
 PacketForwarder::PacketForwarder() {
     endpointMapper_ = EndpointMapper::getInstance();
     enable_ipv6_ = true;
@@ -25,7 +27,8 @@ void PacketForwarder::setEnableIpv6(bool enable) {
 
 bool PacketForwarder::start() {
     //  and !impostor
-    net_handle_ = WinDivertOpen("outbound and (tcp or udp) and remotePort!=5353 and remotePort!=1900 and remotePort!=5355 and remotePort!=3702 and remotePort!=137 and remotePort!=138 and remotePort!=67 and remotePort!=547 and (ip.DstAddr!=127.0.0.1 or ipv6.DstAddr!=::1)",
+    net_handle_ = WinDivertOpen("outbound and (tcp or udp) and remotePort!=5353 and remotePort!=1900 and remotePort!=5355 and remotePort!=3702 and "
+                                "remotePort!=137 and remotePort!=138 and remotePort!=67 and remotePort!=547 and (ip.DstAddr!=127.0.0.1 or ipv6.DstAddr!=::1)",
                                 WINDIVERT_LAYER_NETWORK, 0, 0);
     if (net_handle_ == INVALID_HANDLE_VALUE) {
         DWORD lastError = GetLastError();
@@ -53,7 +56,6 @@ void PacketForwarder::stop() {
         net_thread_.join();
     }
 }
-
 
 void PacketForwarder::net_thread_func(std::stop_token st) {
     uint16_t proxy_port = proxyServer_->getPort();
@@ -137,10 +139,11 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
             if (tcpHdr != nullptr) {
                 UINT16 srcPort = WinDivertHelperNtohs(tcpHdr->SrcPort);
                 UINT16 dstPort = WinDivertHelperNtohs(tcpHdr->DstPort);
-                if ((srcPort < 1024 || dstPort < 1024) &&(dstPort!=53 && dstPort!=443 && dstPort!=80 && dstPort!=123)) {
-                    qDebug() << "addr.Impostor: " << addr.Impostor << "; src: " << srcAddrString << ":" << srcPort << " -> dst: " << dstAddrString << ":" << dstPort;
+                if ((srcPort < 1024 || dstPort < 1024) && (dstPort != 53 && dstPort != 443 && dstPort != 80 && dstPort != 123)) {
+                    qDebug() << "addr.Impostor: " << addr.Impostor << "; src: " << srcAddrString << ":" << srcPort << " -> dst: " << dstAddrString << ":"
+                             << dstPort;
                 }
-                
+
                 if (addr.IPv6 == 1) {
                     if (srcPort == proxy_port) {
                         // 代理程序返回给客户端的数据 (IPv6)
@@ -162,7 +165,7 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                         }
                     } else {
                         // 客户端出方向数据包 (IPv6)
-                        if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
+                        if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort, nullptr)) {
 
                             if (enable_ipv6_ == false) {
                                 continue;
@@ -204,7 +207,7 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                         }
                     } else {
                         // 客户端出方向数据包
-                        if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
+                        if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort, nullptr)) {
                             // 获取或创建映射
                             uint16_t pseudoPort = endpointMapper_->getOrCreateIpv4TcpMapping(ipHdr->SrcAddr, tcpHdr->SrcPort, ipHdr->DstAddr, tcpHdr->DstPort);
 
@@ -224,15 +227,18 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                 UINT16 srcPort = WinDivertHelperNtohs(udpHdr->SrcPort);
                 UINT16 dstPort = WinDivertHelperNtohs(udpHdr->DstPort);
 
-                if ((srcPort < 1024 || dstPort < 1024) &&(dstPort!=53 && dstPort!=443 && dstPort!=80 && dstPort!=123)) {
-                    qDebug() << "addr.Impostor: " << addr.Impostor << "; src: " << srcAddrString << ":" << srcPort << " -> dst: " << dstAddrString << ":" << dstPort;
+                if ((srcPort < 1024 || dstPort < 1024) && (dstPort != 53 && dstPort != 443 && dstPort != 80 && dstPort != 123)) {
+                    qDebug() << "addr.Impostor: " << addr.Impostor << "; src: " << srcAddrString << ":" << srcPort << " -> dst: " << dstAddrString << ":"
+                             << dstPort;
                 }
-                if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort)) {
+                std::string process_name;
+                if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort, &process_name)) {
                     if (enable_ipv6_ == false && addr.IPv6 == 1) {
                         continue;
                     }
                     if (dstPort != 53) { // 暂时不处理53端口
-                        bool handled = proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6);
+                        bool handled = proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6,
+                                                                     process_name);
                         if (!handled) {
                             qDebug() << "UDP 数据包未处理";
                         }

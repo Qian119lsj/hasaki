@@ -61,7 +61,7 @@ public:
     void setBlacklistProcessNames(const QSet<QString> &processNames);
     void setBlacklistMode(bool enabled);
 
-    bool isPortInTargetProcess(quint16 port) const;
+    bool isPortInTargetProcess(quint16 port, std::string *process_name) const;
 
 signals:
     void mappingsChanged();
@@ -81,5 +81,5 @@ private:
     QSet<QString> m_blacklistProcessNames;
     QHash<quint16, QString> m_portToProcessName;
     QHash<quint16, uint64_t> m_portExpirationTime; // 端口过期时间映射
-    QSet<DWORD> m_blacklistedPids; // 进程ID黑名单, 用于忽略自身等
+    QSet<DWORD> m_blacklistedPids;                 // 进程ID黑名单, 用于忽略自身等
 };

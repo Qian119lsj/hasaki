@@ -15,6 +15,7 @@ namespace hasaki {
 
 // UDP会话结构体
 struct UdpSession {
+    std::string process_name;
     SOCKET local_socket = INVALID_SOCKET;         // 本地UDP套接字
     std::mutex mutex;
     std::string client_ip;       // 客户端IP
@@ -59,7 +60,7 @@ public:
     void shutdown();
     // 获取或创建UDP会话
     std::shared_ptr<UdpSession> getOrCreateSession(const std::string &session_key, const std::string &client_ip, uint16_t client_port, const std::string &dest_ip, uint16_t dest_port,
-                                                   bool is_ipv6, bool *is_new_session);
+                                                   bool is_ipv6,std::string process_name, bool *is_new_session);
     
     // 获取所有会话的副本，用于UI显示
     std::map<std::string, std::shared_ptr<UdpSession>> getSessions() {

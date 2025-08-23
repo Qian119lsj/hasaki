@@ -7,6 +7,8 @@
 #include <stop_token>
 #include <thread>
 
+namespace hasaki {
+
 class PacketForwarder {
 public:
     PacketForwarder();
@@ -14,19 +16,19 @@ public:
 
     bool start();
     void stop();
-    void setPortProcessMonitor(PortProcessMonitor* monitor);
+    void setPortProcessMonitor(PortProcessMonitor *monitor);
     void setEnableIpv6(bool enable);
-    void setProxyServer(ProxyServer* proxyServer);
+    void setProxyServer(ProxyServer *proxyServer);
 
 private:
     bool enable_ipv6_ = true;
     void net_thread_func(std::stop_token st);
 
-    HANDLE       net_handle_ = INVALID_HANDLE_VALUE;
+    HANDLE net_handle_ = INVALID_HANDLE_VALUE;
     std::jthread net_thread_;
 
-
-    PortProcessMonitor* portProcessMonitor_ = nullptr;
-    ProxyServer* proxyServer_ = nullptr;
-    EndpointMapper* endpointMapper_ = nullptr;
+    PortProcessMonitor *portProcessMonitor_ = nullptr;
+    ProxyServer *proxyServer_ = nullptr;
+    EndpointMapper *endpointMapper_ = nullptr;
 };
+} // namespace hasaki
