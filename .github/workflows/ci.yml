@@ -45,17 +45,17 @@ jobs:
     - name: Configure CMake
       env:
         VCPKG_ROOT_: ${{ github.workspace }}/vcpkg
-      run: cmake --preset msvc-release
+      run: cmake --preset msvc-ci
 
     - name: Build
       env:
         VCPKG_ROOT_: ${{ github.workspace }}/vcpkg
-      run: cmake --build --preset build-msvc-release
+      run: cmake --build --preset msvc-ci
       
     - name: Install
       env:
         VCPKG_ROOT_: ${{ github.workspace }}/vcpkg
-      run: cmake --install out/build/msvc-release
+      run: cmake --install out/build/msvc-ci
 
     - name: Archive release files
       shell: pwsh
