@@ -26,6 +26,7 @@ set(SOURCES
     src/udp_session_manager.cpp
     src/tcp_session_manager.cpp
     src/console_manager.cpp
+    src/single_instance_manager.cpp
 )
 
 
@@ -48,6 +49,7 @@ set(HEADERS
     include/hasaki/udp_session_manager.h
     include/hasaki/tcp_session_manager.h
     "include/hasaki/console_manager.h"
+    include/hasaki/single_instance_manager.h
 )
 
 add_executable(hasaki WIN32

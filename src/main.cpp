@@ -1,4 +1,5 @@
 #include "hasaki/mainwindow.h"
+#include "hasaki/single_instance_manager.h"
 
 #include <QApplication>
 #include <QDateTime>
@@ -59,7 +60,27 @@ int main(int argc, char *argv[]) {
 
     QCoreApplication::setApplicationName("hasaki");
 
+    // 单实例检查
+    SingleInstanceManager singleInstanceManager("hasaki");
+    
+    if (singleInstanceManager.isAnotherInstanceRunning()) {
+        qDebug() << "检测到已有实例在运行，激活现有窗口";
+        singleInstanceManager.activateExistingInstance();
+        return 0;
+    }
+    
+    // 启动单实例服务器
+    if (!singleInstanceManager.startServer()) {
+        qDebug() << "无法启动单实例服务器";
+        return 1;
+    }
+
     MainWindow w;
+    
+    // 连接激活信号到窗口置顶
+    QObject::connect(&singleInstanceManager, &SingleInstanceManager::activationRequested,
+                     &w, &MainWindow::activateAndRaise);
+    
     w.show();
 
     WSADATA wsaData;

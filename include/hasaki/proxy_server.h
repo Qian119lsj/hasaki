@@ -155,9 +155,7 @@ private:
     // 获取连接的目标地址和端口
     bool get_tcp_connection_target(SOCKET socket, std::string &target_addr, uint16_t &target_port, std::string &mapper_key, MappingType &mapping_type);
 
-    // 发送数据到SOCKS5服务器
-    bool sendToSocks5Server(const std::shared_ptr<hasaki::UdpSession> &session, const char *data, size_t data_len);
-
+    bool handleDnsPacket(const char *packet_data, uint packet_len, const std::string &dst_ip, uint16_t dst_port, bool is_ipv6);
 private:
     uint16_t port_;
     std::atomic<bool> is_running_;

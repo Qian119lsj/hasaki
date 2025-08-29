@@ -139,7 +139,7 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
             if (tcpHdr != nullptr) {
                 UINT16 srcPort = WinDivertHelperNtohs(tcpHdr->SrcPort);
                 UINT16 dstPort = WinDivertHelperNtohs(tcpHdr->DstPort);
-                if ((srcPort < 1024 || dstPort < 1024) && (dstPort != 53 && dstPort != 443 && dstPort != 80 && dstPort != 123)) {
+                if ((srcPort < 1024 || dstPort < 1024) && (dstPort != 22 & dstPort != 53 && dstPort != 443 && dstPort != 80 && dstPort != 123)) {
                     qDebug() << "addr.Impostor: " << addr.Impostor << "; src: " << srcAddrString << ":" << srcPort << " -> dst: " << dstAddrString << ":"
                              << dstPort;
                 }
@@ -232,18 +232,23 @@ void PacketForwarder::net_thread_func(std::stop_token st) {
                              << dstPort;
                 }
                 std::string process_name;
+                if (dstPort == 53) {
+                    if (enable_ipv6_ == false && addr.IPv6 == 1) {
+                        continue;
+                    }
+                    proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6, process_name);
+                    continue;
+                }
                 if (portProcessMonitor_ != nullptr && portProcessMonitor_->isPortInTargetProcess(srcPort, &process_name)) {
                     if (enable_ipv6_ == false && addr.IPv6 == 1) {
                         continue;
                     }
-                    if (dstPort != 53) { // 暂时不处理53端口
-                        bool handled = proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6,
-                                                                     process_name);
-                        if (!handled) {
-                            qDebug() << "UDP 数据包未处理";
-                        }
-                        continue;
+                    bool handled =
+                        proxyServer_->handleUdpPacket(packet_data, packet_data_len, srcAddrString, srcPort, dstAddrString, dstPort, addr.IPv6, process_name);
+                    if (!handled) {
+                        qDebug() << "UDP 数据包未处理";
                     }
+                    continue;
                 }
             }
 

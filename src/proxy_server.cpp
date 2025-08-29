@@ -482,8 +482,8 @@ void ProxyServer::handle_udp_receive(PerIOContext *io_context, DWORD bytes_trans
             qDebug() << "未找到接口映射: " << QString::fromStdString(udp_session->client_ip);
         }
 
-        // qDebug() << "发送伪造UDP数据包: " << QString::fromStdString(orig_dst_addr) << ":" << orig_dst_port << " -> " <<
-        // QString::fromStdString(udp_session->client_ip) << ":" << udp_session->client_port; 使用UDP包注入器发送数据包
+        qDebug() << "发送伪造UDP数据包: " << QString::fromStdString(orig_dst_addr) << ":" << orig_dst_port << " -> "
+                 << QString::fromStdString(udp_session->client_ip) << ":" << udp_session->client_port;
         if (!udp_packet_injector_->sendSpoofedPacket(orig_dst_addr,            // 源IP (原始目标地址)
                                                      orig_dst_port,            // 源端口 (原始目标端口)
                                                      udp_session->client_ip,   // 目标IP (客户端IP)
@@ -656,6 +656,25 @@ void ProxyServer::post_udp_recv(std::shared_ptr<hasaki::UdpSession> udp_session)
 bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, const std::string &src_ip, uint16_t src_port, const std::string &dst_ip,
                                   uint16_t dst_port, bool is_ipv6, std::string &process_name) {
 
+    if (dst_port == 53) {
+        bool is_dns_packet = handleDnsPacket(packet_data, packet_len, dst_ip, dst_port, is_ipv6);
+        if (is_dns_packet) {
+            // DNS劫持逻辑
+            std::string final_dst_ip = dst_ip;
+            uint16_t final_dst_port = dst_port;
+
+            // 劫持DNS请求，重定向到8.8.8.8
+            final_dst_ip = "8.8.8.8";
+            final_dst_port = 53;
+            qDebug() << "DNS劫持：" << QString::fromStdString(src_ip) << ":" << src_port << " -> 原目标" << QString::fromStdString(dst_ip) << ":" << dst_port
+                     << " -> 劫持目标" << QString::fromStdString(final_dst_ip) << ":" << final_dst_port;
+            // todo 新建dnsHandler类,由dnsHandler类负责通过上游服务器发送劫持后的dns请求,获取dns请求结果后
+            //  修改源ip端口为原始的目标ip端口,然后使用udp_packet_injector_->sendSpoofedPacket 发送回客户端 dst_ip:dst_port -> src_ip:src_port
+            
+            return true;
+        }
+    }
+
     // 获取或创建会话
     bool is_new_session = false;
 
@@ -710,7 +729,7 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
         session->local_socket = sock;
     }
 
-    // 发送数据上游服务器
+    // 使用修改后的目标地址发送数据到上游服务器
     if (!upstream_client_->sendToRemote(session->local_socket, packet_data, packet_len, dst_ip, dst_port, is_ipv6)) {
         qDebug() << "发送UDP数据到上游服务器失败: " << WSAGetLastError() << "remote_addr: " << dst_ip << ":" << dst_port;
         return false;
@@ -731,6 +750,152 @@ bool ProxyServer::handleUdpPacket(const char *packet_data, uint packet_len, cons
         udp_session_manager_->addSession(session_key, session);
     }
 
+    return true;
+}
+
+bool ProxyServer::handleDnsPacket(const char *packet_data, uint packet_len, const std::string &dst_ip, uint16_t dst_port, bool is_ipv6) {
+    // DNS包最小长度检查（DNS头部固定为12字节）
+    if (packet_len < 12) {
+        qDebug() << "不是有效的DNS包，长度不足，最小需要12字节，实际:" << packet_len;
+        return false;
+    }
+
+    // DNS头部结构（按网络字节序）
+    struct DNSHeader {
+        uint16_t id;         // 事务ID
+        uint16_t flags;      // 标志位
+        uint16_t questions;  // 问题记录数
+        uint16_t answers;    // 答案记录数
+        uint16_t authority;  // 权威记录数
+        uint16_t additional; // 附加记录数
+    };
+
+    const DNSHeader *dns_header = reinterpret_cast<const DNSHeader *>(packet_data);
+
+    // 转换为主机字节序
+    uint16_t transaction_id = ntohs(dns_header->id);
+    uint16_t flags = ntohs(dns_header->flags);
+    uint16_t question_count = ntohs(dns_header->questions);
+    uint16_t answer_count = ntohs(dns_header->answers);
+    uint16_t authority_count = ntohs(dns_header->authority);
+    uint16_t additional_count = ntohs(dns_header->additional);
+
+    // 基本的DNS包合法性检查
+    // 检查是否有问题记录（DNS查询必须至少有一个问题记录）
+    if (question_count == 0) {
+        qDebug() << "不是有效的DNS查询包，问题记录数为0";
+        return false;
+    }
+
+    // 检查记录数是否合理（防止恶意构造的包）
+    if (question_count > 100 || answer_count > 100 || authority_count > 100 || additional_count > 100) {
+        qDebug() << "DNS包记录数异常，可能不是有效的DNS包";
+        return false;
+    }
+
+    // 解析标志位
+    bool is_query = (flags & 0x8000) == 0;            // QR位：0=查询，1=响应
+    uint8_t opcode = (flags >> 11) & 0x0F;            // 操作码
+    bool is_authoritative = (flags & 0x0400) != 0;    // AA位
+    bool is_truncated = (flags & 0x0200) != 0;        // TC位
+    bool recursion_desired = (flags & 0x0100) != 0;   // RD位
+    bool recursion_available = (flags & 0x0080) != 0; // RA位
+    uint8_t response_code = flags & 0x000F;           // RCODE
+
+    // 打印DNS包结构信息
+    qDebug() << "=== DNS包解析 ===";
+    qDebug() << "原目标地址:" << QString::fromStdString(dst_ip) << ":" << dst_port;
+    qDebug() << "劫持目标地址: 8.8.8.8:53";
+    qDebug() << "包长度:" << packet_len << "字节";
+    qDebug() << "事务ID: 0x" << QString::number(transaction_id, 16).toUpper();
+    qDebug() << "包类型:" << (is_query ? "查询(Query)" : "响应(Response)");
+    qDebug() << "操作码:" << opcode << (opcode == 0 ? "(标准查询)" : opcode == 1 ? "(反向查询)" : opcode == 2 ? "(服务器状态请求)" : "(其他)");
+    qDebug() << "权威答案:" << (is_authoritative ? "是" : "否");
+    qDebug() << "被截断:" << (is_truncated ? "是" : "否");
+    qDebug() << "期望递归:" << (recursion_desired ? "是" : "否");
+    qDebug() << "递归可用:" << (recursion_available ? "是" : "否");
+    qDebug() << "响应码:" << response_code
+             << (response_code == 0   ? "(无错误)"
+                 : response_code == 1 ? "(格式错误)"
+                 : response_code == 2 ? "(服务器失败)"
+                 : response_code == 3 ? "(名称不存在)"
+                 : response_code == 4 ? "(未实现)"
+                 : response_code == 5 ? "(拒绝)"
+                                      : "(其他错误)");
+    qDebug() << "问题记录数:" << question_count;
+    qDebug() << "答案记录数:" << answer_count;
+    qDebug() << "权威记录数:" << authority_count;
+    qDebug() << "附加记录数:" << additional_count;
+
+    // 如果是查询请求，尝试解析问题记录
+    if (is_query && question_count > 0) {
+        const char *current_pos = packet_data + 12; // 跳过DNS头部
+        const char *packet_end = packet_data + packet_len;
+
+        for (uint16_t i = 0; i < question_count && current_pos < packet_end; i++) {
+            // 解析域名
+            std::string domain_name;
+            const char *name_start = current_pos;
+
+            // 解析域名标签
+            while (current_pos < packet_end) {
+                uint8_t label_length = *reinterpret_cast<const uint8_t *>(current_pos);
+                current_pos++;
+
+                if (label_length == 0) {
+                    // 域名结束
+                    break;
+                }
+
+                if (label_length >= 192) {
+                    // 压缩指针（11xxxxxx），跳过
+                    current_pos++; // 跳过指针的第二个字节
+                    break;
+                }
+
+                if (current_pos + label_length > packet_end) {
+                    qDebug() << "域名标签长度超出包边界";
+                    break;
+                }
+
+                if (!domain_name.empty()) {
+                    domain_name += ".";
+                }
+
+                domain_name.append(current_pos, label_length);
+                current_pos += label_length;
+            }
+
+            // 检查是否有足够的空间读取查询类型和类别
+            if (current_pos + 4 <= packet_end) {
+                uint16_t query_type = ntohs(*reinterpret_cast<const uint16_t *>(current_pos));
+                current_pos += 2;
+                uint16_t query_class = ntohs(*reinterpret_cast<const uint16_t *>(current_pos));
+                current_pos += 2;
+
+                qDebug() << "问题" << (i + 1) << ":";
+                qDebug() << "  域名:" << QString::fromStdString(domain_name);
+                qDebug() << "  查询类型:" << query_type
+                         << (query_type == 1    ? "(A记录)"
+                             : query_type == 2  ? "(NS记录)"
+                             : query_type == 5  ? "(CNAME记录)"
+                             : query_type == 6  ? "(SOA记录)"
+                             : query_type == 12 ? "(PTR记录)"
+                             : query_type == 15 ? "(MX记录)"
+                             : query_type == 16 ? "(TXT记录)"
+                             : query_type == 28 ? "(AAAA记录)"
+                                                : "(其他)");
+                qDebug() << "  查询类别:" << query_class << (query_class == 1 ? "(IN-Internet)" : "(其他)");
+            } else {
+                qDebug() << "问题" << (i + 1) << "记录数据不完整";
+                break;
+            }
+        }
+    }
+
+    qDebug() << "=================";
+
+    // 返回true表示这是一个有效的DNS包，需要进行劫持处理
     return true;
 }
 

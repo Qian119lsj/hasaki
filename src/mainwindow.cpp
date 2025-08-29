@@ -18,6 +18,10 @@
 #include <qapplication.h>
 #include <qdebug.h>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow) {
     ui->setupUi(this);
     createTrayIcon();
@@ -86,6 +90,37 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     // 初始更新一次UDP会话表格
     updateUdpSessionView();
+}
+
+void MainWindow::activateAndRaise() {
+    // 如果窗口最小化到托盘，先显示窗口
+    if (isHidden()) {
+        show();
+    }
+    
+    // 如果窗口被最小化，恢复正常状态
+    if (isMinimized()) {
+        setWindowState((windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+    }
+    
+    // 置顶并激活窗口
+    raise();
+    activateWindow();
+    
+#ifdef Q_OS_WIN
+    // Windows特定的置顶代码
+    HWND hwnd = reinterpret_cast<HWND>(winId());
+    if (hwnd) {
+        // 强制置顶窗口
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, 
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        // 立即取消置顶状态，避免窗口一直保持在最前面
+        SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, 
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+        // 设置前台窗口
+        SetForegroundWindow(hwnd);
+    }
+#endif
 }
 
 MainWindow::~MainWindow() {

@@ -54,6 +54,9 @@ public:
 
     // 获取IP地址到网络适配器索引的映射
     const QMap<QString, int> &getAdapterIpMap() const { return adapterIpMap_; }
+    
+    // 激活并置顶窗口
+    void activateAndRaise();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
